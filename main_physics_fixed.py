@@ -21,7 +21,6 @@ import os
 
 @njit(fastmath=True, cache=True)
 def compute_forces_numba(pos, vel, N, rcut2, kind, k, epsilon, sigma, De, a, r0, mass):
-    """Вычисление всех сил - ИСПРАВЛЕНО для корректной физики!"""
     F = np.zeros((N, 2), dtype=np.float32)
 
     if kind == 0:  # none
@@ -37,6 +36,13 @@ def compute_forces_numba(pos, vel, N, rcut2, kind, k, epsilon, sigma, De, a, r0,
                 continue
 
             r = np.sqrt(r2)
+
+            # clamp минимального расстояния ради стабильности
+            rmin = 0.1 * sigma if sigma > 0.0 else 1e-3
+            if r < rmin:
+                r = rmin
+                r2 = r*r
+
             invr = 1.0 / r
             nx = dx * invr  # Направление от i к j
             ny = dy * invr
@@ -44,36 +50,20 @@ def compute_forces_numba(pos, vel, N, rcut2, kind, k, epsilon, sigma, De, a, r0,
             # ИСПРАВЛЕННЫЕ ПОТЕНЦИАЛЫ:
 
             if kind == 1:  # repel (1/r^2) - ОТТАЛКИВАНИЕ
-                # Положительная сила (отталкивают друг друга)
                 mag = k / r2
-                # Сила направлена ОТ j К i (и наоборот)
-
-            elif kind == 2:  # attract (1/r^2) - ПРИТЯГИВАНИЕ
-                # Отрицательная сила (притягивают друг друга)
+            elif kind == 2:  # attract (1/r^2)
                 mag = -k / r2
-                # Сила направлена К j ОТ i (и наоборот)
-
-            elif kind == 3:  # Lennard-Jones - УНИВЕРСАЛЬНЫЙ потенциал
-                # Близко: отталкивание, далеко: притягивание
+            elif kind == 3:  # Lennard-Jones
                 sr = sigma / r
                 sr6 = sr*sr*sr*sr*sr*sr
                 sr12 = sr6*sr6
-                # Производная LJ потенциала U = 4*eps*(sr^12 - sr^6)
                 mag = 24.0*epsilon*(2.0*sr12 - sr6)/r
-
-            elif kind == 4:  # Morse - МОЛЕКУЛЯРНЫЙ потенциал
-                # U = De*(1-exp(-a*(r-r0)))^2
-                # Имеет минимум при r=r0 (длина связи)
+            elif kind == 4:  # Morse
                 d = r - r0
                 ea = np.exp(-a*d)
                 mag = -2.0*a*De*(1.0-ea)*ea
-
             else:
                 mag = 0.0
-
-            # Применяем силу:
-            # F_i = mag * n (сила на i в направлении j)
-            # F_j = -mag * n (сила на j в направлении i)
 
             fx = mag * nx
             fy = mag * ny
@@ -86,14 +76,17 @@ def compute_forces_numba(pos, vel, N, rcut2, kind, k, epsilon, sigma, De, a, r0,
     return F
 
 @njit(fastmath=True, cache=True)
-def integrate_velocity_verlet_numba(pos, vel, F, F_old, dt, mass, N, damping):
+def integrate_velocity_verlet_numba(pos, vel, F, F_old, dt, mass, N, gamma):
     """Velocity Verlet с демпированием"""
-    vel_new = vel + 0.5 * (F + F_old) / mass * dt
-    pos_new = pos + vel * dt + 0.5 * F / mass * (dt*dt)
-
-    # ДЕМПИРОВАНИЕ (трение) - помогает системе прийти в равновесие
-    vel_new = vel_new * damping
-
+    # стандартный verlet-полуприём
+    vel_half = vel + 0.5 * (F + F_old) / mass * dt
+    pos_new = pos + vel_half * dt
+    # обновлённые силы рассчитываются вне этой функции (в вашем коде)
+    # но для совместимости здесь применяем демпинг к скорости
+    damp = 1.0
+    if gamma > 0.0:
+        damp = np.exp(-gamma * dt)
+    vel_new = vel_half * damp
     return pos_new, vel_new
 
 @njit(fastmath=True, cache=True)
@@ -195,25 +188,25 @@ class Vessel:
 @dataclass
 class PotentialParams:
     kind: str = "none"
-    k: float = 10.0  # ← УВЕЛИЧЕНО с 1.0!
-    epsilon: float = 1.0
-    sigma: float = 0.1
-    De: float = 1.0
-    a: float = 10.0
-    r0: float = 0.2
-    rcut_lr: float = 1.5
+    k: float = 1.0      # [кДж/моль·нм²] для электростатики/гравитации
+    epsilon: float = 1.0 # [кДж/моль] глубина потенциальной ямы
+    sigma: float = 0.34  # [нм] характерное расстояние (диаметр атома)
+    De: float = 1.0     # [кДж/моль] глубина ямы Морзе
+    a: float = 2.0      # [1/нм] параметр жёсткости Морзе
+    r0: float = 0.38    # [нм] равновесное расстояние Морзе
+    rcut_lr: float = 2.5 # [нм] радиус обрезания дальних взаимодействий
 
 # ==================== SYSTEM ====================
 @dataclass
 class System:
     vessel: Vessel
     N: int = 50
-    radius: float = 0.03
-    temp: float = 1.0
-    dt: float = 0.001  # ← УМЕНЬШЕНО с 0.008!
+    radius: float = 0.02  # [нм] уменьшен радиус частицы (с 0.17 до 0.02)
+    temp: float = 1.0     # [kT] безразмерная температура
+    dt: float = 0.001     # [пс] шаг по времени
     params: PotentialParams = field(default_factory=PotentialParams)
-    mass: float = 1.0
-    damping: float = 0.995  # ← ДОБАВЛЕНО!
+    mass: float = 39.95   # [г/моль] масса частицы (аргон)
+    friction_gamma: float = 0.1  # [1/пс] коэффициент трения
 
     pos: np.ndarray | None = None
     vel: np.ndarray | None = None
@@ -263,8 +256,8 @@ class System:
         for i in range(self.N):
             self.pos[i] = random_point_inside()
 
-        # ← УВЕЛИЧЕНА НАЧАЛЬНАЯ ТЕМПЕРАТУРА для лучшего перемешивания
-        self.vel = rng.normal(0, 1.0, size=(self.N, 2)).astype(np.float32) * np.sqrt(self.temp * 2)
+        sigma_v = np.sqrt(self.temp / max(self.mass, 1e-12))
+        self.vel = rng.normal(0.0, sigma_v, size=(self.N, 2)).astype(np.float32)
 
     def _rcut(self):
         p = self.params
@@ -297,9 +290,8 @@ class System:
             p.k, p.epsilon, p.sigma, p.De, p.a, p.r0, self.mass
         )
 
-        # ← ДОБАВЛЕНО ДЕМПИРОВАНИЕ!
         pos_new, vel_new = integrate_velocity_verlet_numba(
-            self.pos, self.vel, F_new, self.F_old, self.dt, self.mass, N, self.damping
+            self.pos, self.vel, F_new, self.F_old, self.dt, self.mass, N, self.friction_gamma
         )
 
         for i in range(N):
@@ -765,10 +757,10 @@ class SimulationApp:
 
         self.scat = self.ax_anim.scatter(self.system.pos[:, 0], 
                                         self.system.pos[:, 1],
-                                        s=(self.system.radius * 300)**2,  # увеличиваем размер
+                                        s=(self.system.radius * 800)**2,  # уменьшен множитель с 300 до 800
                                         alpha=0.85,
                                         edgecolor='k',
-                                        linewidths=1.0,  # делаем обводку толще
+                                        linewidths=0.5,  # уменьшена толщина обводки
                                         c="#215a93"  
                                     )
 
@@ -875,15 +867,16 @@ class SimulationApp:
         self.rb_pot = RadioButtons(ax_radio_pot, ('Нет', 'Отталкивание', 'Притяжение', 'Леннард-Джонс', 'Морзе'), active=0)
         self.rb_pot.on_clicked(self._on_potential_change)
 
+        # Слайдеры с единицами измерения
         axN = self.fig.add_axes([0.55, 0.17, 0.18, 0.025])
         axR = self.fig.add_axes([0.55, 0.135, 0.18, 0.025])
         axT = self.fig.add_axes([0.55, 0.1, 0.18, 0.025])
         axK = self.fig.add_axes([0.55, 0.065, 0.18, 0.025])
 
-        self.sld_N = Slider(axN, "N", 5, 300, valinit=self.system.N, valstep=1)
-        self.sld_R = Slider(axR, "R", 0.01, 0.08, valinit=self.system.radius, valstep=0.005)
-        self.sld_T = Slider(axT, "T", 0.1, 5.0, valinit=self.system.temp, valstep=0.1)
-        self.sld_K = Slider(axK, "k", 0.1, 50.0, valinit=self.system.params.k, valstep=0.5)
+        self.sld_N = Slider(axN, "N", 10, 200, valinit=self.system.N, valstep=5)
+        self.sld_R = Slider(axR, "R", 0.01, 0.05, valinit=self.system.radius)
+        self.sld_T = Slider(axT, "T", 0.1, 5.0, valinit=self.system.temp)
+        self.sld_K = Slider(axK, "k", 0.0, 10.0, valinit=self.system.params.k)
 
         for s in (self.sld_N, self.sld_R, self.sld_T, self.sld_K):
             s.on_changed(self._on_slider_change)
@@ -904,14 +897,18 @@ class SimulationApp:
         # Поля для параметров потенциалов
         ax_eps = self.fig.add_axes([0.82, 0.16, 0.06, 0.035])
         self.tb_eps = TextBox(ax_eps, 'ε ', initial=str(self.system.params.epsilon))
+        
         ax_sig = self.fig.add_axes([0.91, 0.16, 0.06, 0.035])
         self.tb_sig = TextBox(ax_sig, 'σ ', initial=str(self.system.params.sigma))
+        
         ax_De = self.fig.add_axes([0.82, 0.11, 0.06, 0.035])
         self.tb_De = TextBox(ax_De, 'De ', initial=str(self.system.params.De))
-        ax_a  = self.fig.add_axes([0.91, 0.11, 0.06, 0.035])
-        self.tb_a  = TextBox(ax_a , 'a ', initial=str(self.system.params.a))
+        
+        ax_a = self.fig.add_axes([0.91, 0.11, 0.06, 0.035])
+        self.tb_a = TextBox(ax_a, 'a ', initial=str(self.system.params.a))
+        
         ax_r0 = self.fig.add_axes([0.82, 0.06, 0.06, 0.035])
-        self.tb_r0 = TextBox(ax_r0, 'r0 ', initial=str(self.system.params.r0))
+        self.tb_r0 = TextBox(ax_r0, 'r₀ ', initial=str(self.system.params.r0))
         
         for tb in (self.tb_eps, self.tb_sig, self.tb_De, self.tb_a, self.tb_r0):
             tb.on_submit(self._on_param_submit)
@@ -1040,10 +1037,10 @@ class SimulationApp:
             self.scat.remove()
             self.scat = self.ax_anim.scatter(self.system.pos[:, 0], 
                                         self.system.pos[:, 1],
-                                        s=(self.system.radius * 300)**2,  # увеличиваем размер
+                                        s=(self.system.radius * 800)**2,  # тот же множитель
                                         alpha=0.85,
                                         edgecolor='k',
-                                        linewidths=1.0,  # делаем обводку толще
+                                        linewidths=0.5,
                                         c="#215a93"  # более приятный синий цвет
                                     )
         else:
