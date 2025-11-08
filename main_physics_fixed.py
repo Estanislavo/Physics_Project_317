@@ -17,10 +17,8 @@ from PIL import Image, ImageTk
 import os
 
 
-# ==================== NUMBA JIT ФУНКЦИИ ====================
-
 @njit(fastmath=True, cache=True)
-def compute_forces_numba(pos, vel, N, rcut2, kind, k, epsilon, sigma, De, a, r0, mass):
+def compute_forces_numba(pos, N, rcut2, kind, k, epsilon, sigma, De, a, r0, mass):
     F = np.zeros((N, 2), dtype=np.float32)
 
     if kind == 0:  # none
@@ -55,13 +53,13 @@ def compute_forces_numba(pos, vel, N, rcut2, kind, k, epsilon, sigma, De, a, r0,
                 mag = -k / r2
             elif kind == 3:  # Lennard-Jones
                 sr = sigma / r
-                sr6 = sr*sr*sr*sr*sr*sr
-                sr12 = sr6*sr6
-                mag = 24.0*epsilon*(2.0*sr12 - sr6)/r
+                sr6 = sr ** 6
+                sr12 = sr ** 12
+                mag = 24.0 * epsilon * (2.0 * sr12 - sr6) / r
             elif kind == 4:  # Morse
                 d = r - r0
-                ea = np.exp(-a*d)
-                mag = -2.0*a*De*(1.0-ea)*ea
+                ea = np.exp(-a * d)
+                mag = 2.0 * De * a * ea * (1.0 - ea)
             else:
                 mag = 0.0
 
@@ -114,7 +112,7 @@ def reflect_circle_numba(pos, vel, cx, cy, R, radius):
     dx = pos[0] - cx
     dy = pos[1] - cy
     dist2 = dx*dx + dy*dy
-    R_eff = R - radius - 1e-6
+    R_eff = R - radius
 
     if dist2 > R_eff*R_eff:
         dist = np.sqrt(dist2)
@@ -129,6 +127,71 @@ def reflect_circle_numba(pos, vel, cx, cy, R, radius):
             pos[0] = cx + nx * R_eff
             pos[1] = cy + ny * R_eff
 
+    return pos, vel
+
+
+@njit(fastmath=True, cache=True)
+def reflect_poly_numba(pos: np.ndarray, vel: np.ndarray, poly: np.ndarray, radius: float):
+    """ИСПРАВЛЕННАЯ версия отражения от полигона"""
+    n_vertices = len(poly)
+    min_dist = 1e10
+    normal_x = 0.0
+    normal_y = 0.0
+    
+    for i in range(n_vertices):
+        j = (i + 1) % n_vertices
+        
+        # Начало и конец отрезка
+        Ax, Ay = poly[i]
+        Bx, By = poly[j]
+        
+        # Вектор AB
+        ABx = Bx - Ax
+        ABy = By - Ay
+        AB_sq = ABx*ABx + ABy*ABy
+        
+        if AB_sq < 1e-12:
+            continue
+            
+        # Вектор AP  
+        APx = pos[0] - Ax
+        APy = pos[1] - Ay
+        
+        # Проекция на AB
+        t = (APx*ABx + APy*ABy) / AB_sq
+        t = max(0.0, min(1.0, t))  # Ограничиваем отрезком
+        
+        # Ближайшая точка на отрезке
+        Px = Ax + t * ABx
+        Py = Ay + t * ABy
+        
+        # Вектор от ближайшей точки к частице
+        dx = pos[0] - Px
+        dy = pos[1] - Py
+        dist = np.sqrt(dx*dx + dy*dy)
+        
+        if dist < min_dist:
+            min_dist = dist
+            if dist > 1e-8:
+                normal_x = dx / dist
+                normal_y = dy / dist
+            else:
+                # Если на линии - используем перпендикуляр к AB
+                AB_len = np.sqrt(AB_sq)
+                normal_x = -ABy / AB_len
+                normal_y = ABx / AB_len
+    
+    # Отражение
+    if min_dist < radius + 1e-6:
+        dot = vel[0]*normal_x + vel[1]*normal_y
+        vel[0] -= 2.0 * dot * normal_x
+        vel[1] -= 2.0 * dot * normal_y
+        
+        # Коррекция позиции
+        correction = (radius - min_dist) * 1.01
+        pos[0] += correction * normal_x
+        pos[1] += correction * normal_y
+        
     return pos, vel
 
 @njit(cache=True)
@@ -181,7 +244,7 @@ class Vessel:
         elif self.kind == "circle":
             return reflect_circle_numba(p, v, *self.circle, radius)
         elif self.kind == "poly" and self.poly is not None and len(self.poly) >= 3:
-            return reflect_poly_numba(p, v, self.poly, radius)
+            return reflect_poly_numba(p, v, self.poly, radius)  # ← ЭТО НЕ РАБОТАЕТ!
         return p, v
 
 # ==================== POTENTIAL PARAMS ====================
@@ -201,8 +264,8 @@ class PotentialParams:
 class System:
     vessel: Vessel
     N: int = 50
-    radius: float = 0.02  # [нм] уменьшен радиус частицы (с 0.17 до 0.02)
-    temp: float = 1.0     # [kT] безразмерная температура
+    radius: float = 0.03  # [нм] уменьшен радиус частицы (с 0.17 до 0.02)
+    temp: float = 2.0     # [kT] безразмерная температура
     dt: float = 0.001     # [пс] шаг по времени
     params: PotentialParams = field(default_factory=PotentialParams)
     mass: float = 39.95   # [г/моль] масса частицы (аргон)
@@ -237,10 +300,8 @@ class System:
                 cx, cy, R = self.vessel.circle
                 for _ in range(10000):
                     ang = rng.uniform(0, 2*np.pi)
-                    rad = (rng.uniform(0, R-self.radius) ** 0.5)
+                    rad = np.sqrt(rng.uniform(0, (R-self.radius)**2))  # ОДИН корень!
                     p = np.array([cx, cy]) + rad * np.array([np.cos(ang), np.sin(ang)])
-                    if self.vessel.contains(p):
-                        return p
             elif self.vessel.kind == "poly" and self.vessel.poly is not None:
                 poly = self.vessel.poly
                 xmin, ymin = poly.min(axis=0)
@@ -286,7 +347,7 @@ class System:
         p = self.params
 
         F_new = compute_forces_numba(
-            self.pos, self.vel, N, rcut2, kind_code,
+            self.pos, N, rcut2, kind_code,  # ← УБРАТЬ vel!
             p.k, p.epsilon, p.sigma, p.De, p.a, p.r0, self.mass
         )
 
@@ -749,7 +810,7 @@ class SimulationApp:
         )
 
         self.vessel = Vessel(kind="rect", rect=(-1, -1, 1, 1))
-        self.system = System(self.vessel, N=100, radius=0.03, temp=1.0, dt=0.001)
+        self.system = System(self.vessel, N=100, radius=0.03, temp=2.0, dt=0.001)
         self.system.seed()
 
         self.vessel_patch = None
@@ -807,9 +868,124 @@ class SimulationApp:
         # Начальные скорости
         self.system.vel = np.random.randn(N, 2) * np.sqrt(self.system.temp)
 
-    def _on_back(self, event):
+    def _on_back(self, event=None):
         if callable(self.on_back_callback):
             self.on_back_callback()
+
+    def _create_settings_panel(self):
+        """Создаёт виджеты боковой панели настроек (в том же окне)."""
+        sf = self.settings_frame
+        for w in sf.winfo_children():
+            w.destroy()
+
+        hdr = tk.Label(sf, text="Настройки симуляции", bg=sf.cget('bg'),
+                       font=tkFont.Font(family="Helvetica", size=16, weight="bold"))
+        hdr.pack(pady=(12, 6), padx=12)
+
+        small = tkFont.Font(family="Helvetica", size=10)
+
+        # helper to add label + entry + unit + help text
+        def add_field(name, var, unit, help_text):
+            frm = tk.Frame(sf, bg=sf.cget('bg'))
+            frm.pack(fill='x', padx=12, pady=6)
+            tk.Label(frm, text=name, bg=sf.cget('bg'), anchor='w', font=small).grid(row=0, column=0, sticky='w')
+            ent = tk.Entry(frm, textvariable=var, width=10)
+            ent.grid(row=0, column=1, sticky='e', padx=(6,6))
+            tk.Label(frm, text=unit, bg=sf.cget('bg'), font=small).grid(row=0, column=2, sticky='w')
+            tk.Label(frm, text=help_text, bg=sf.cget('bg'), fg='#555', font=('Helvetica', 8), wraplength=280, justify='left').grid(row=1, column=0, columnspan=3, sticky='w', pady=(3,0))
+
+        # Переменные
+        self.var_N = tk.IntVar(value=50)
+        self.var_radius = tk.DoubleVar(value=0.03)
+        self.var_temp = tk.DoubleVar(value=1.0)
+        self.var_dt = tk.DoubleVar(value=0.001)
+        self.var_gamma = tk.DoubleVar(value=self.system.friction_gamma if hasattr(self, 'system') else 0.1)
+
+        self.var_pot_kind = tk.StringVar(value=(self.system.params.kind if hasattr(self, 'system') else 'none'))
+        self.var_eps = tk.DoubleVar(value=(self.system.params.epsilon if hasattr(self, 'system') else 1.0))
+        self.var_sigma = tk.DoubleVar(value=(self.system.params.sigma if hasattr(self, 'system') else 0.34))
+        self.var_De = tk.DoubleVar(value=(self.system.params.De if hasattr(self, 'system') else 1.0))
+        self.var_a = tk.DoubleVar(value=(self.system.params.a if hasattr(self, 'system') else 2.0))
+        self.var_r0 = tk.DoubleVar(value=(self.system.params.r0 if hasattr(self, 'system') else 0.38))
+        self.var_k = tk.DoubleVar(value=(self.system.params.k if hasattr(self, 'system') else 1.0))
+
+        add_field("N", self.var_N, "шт", "Число частиц в системе (шт).")
+        add_field("R", self.var_radius, "нм", "Радиус частицы (нм). Должен быть достаточно мал по сравнению с размером сосуда.")
+        add_field("T", self.var_temp, "kT", "Температура (в единицах kT) — задаёт масштаб начальных скоростей.")
+        add_field("dt", self.var_dt, "пс", "Шаг интегрирования (пс). Меньше — стабильнее, но медленнее.")
+        add_field("γ", self.var_gamma, "1/пс", "Коэффициент трения (демпирования). 0 — без демпирования.")
+
+        # Потенциалы
+        pot_frm = tk.Frame(sf, bg=sf.cget('bg'))
+        pot_frm.pack(fill='x', padx=12, pady=(8,4))
+        tk.Label(pot_frm, text="Потенциал", bg=sf.cget('bg'), font=small).grid(row=0, column=0, sticky='w')
+        pot_opts = ('none', 'repel', 'attract', 'lj', 'morse')
+        pot_menu = ttk.Combobox(pot_frm, values=pot_opts, textvariable=self.var_pot_kind, state='readonly', width=12)
+        pot_menu.grid(row=0, column=1, sticky='e', padx=6)
+        tk.Label(pot_frm, text="Выбор типа парного взаимодействия.", bg=sf.cget('bg'), fg='#555', font=('Helvetica', 8)).grid(row=1, column=0, columnspan=2, sticky='w', pady=(3,0))
+
+        add_field("ε", self.var_eps, "кДж/моль", "Глубина ямы Lennard-Jones / Morse (ε или De).")
+        add_field("σ", self.var_sigma, "нм", "Характерное расстояние LJ (σ) — ориентируйтесь ~ 2·R.")
+        add_field("De", self.var_De, "кДж/моль", "Глубина ямы для потенциала Морзе (De).")
+        add_field("a", self.var_a, "1/нм", "Жёсткость Морзе (a) — чем больше, тем жёстче краткая часть.")
+        add_field("r₀", self.var_r0, "нм", "Равновесное расстояние Морзе (r₀).")
+        add_field("k", self.var_k, "кДж/моль·нм²", "Коэффициент для репел/аттракта (1/r² тип).")
+
+        # Кнопки Применить / Закрыть панели
+        btns = tk.Frame(sf, bg=sf.cget('bg'))
+        btns.pack(fill='x', padx=12, pady=12)
+        apply_btn = tk.Button(btns, text="Применить", bg='#0071e3', fg='white', relief='flat', command=self._apply_settings)
+        apply_btn.pack(side='left', padx=6)
+        close_btn = tk.Button(btns, text="Свернуть", bg='#313132', fg='white', relief='flat', command=self._toggle_settings)
+        close_btn.pack(side='right', padx=6)
+
+    def _populate_settings_panel(self):
+        """Заполнить поля значениями из system (вызывается после seed)."""
+        if not hasattr(self, 'system') or self.system is None:
+            return
+        self.var_N.set(self.system.N)
+        self.var_radius.set(float(self.system.radius))
+        self.var_temp.set(float(self.system.temp))
+        self.var_dt.set(float(self.system.dt))
+        self.var_gamma.set(float(self.system.friction_gamma))
+        p = self.system.params
+        self.var_pot_kind.set(p.kind)
+        self.var_eps.set(p.epsilon)
+        self.var_sigma.set(p.sigma)
+        self.var_De.set(p.De)
+        self.var_a.set(p.a)
+        self.var_r0.set(p.r0)
+        self.var_k.set(p.k)
+
+    def _toggle_settings(self):
+        """Свернуть/развернуть боковую панель настроек."""
+        if self.settings_frame.winfo_viewable():
+            self.settings_frame.forget()
+        else:
+            self.settings_frame.pack(side='left', fill='y')
+
+    def _apply_settings(self):
+        """Применить настройки из панели к системе и перезапустить/применить."""
+        try:
+            self.system.N = int(self.var_N.get())
+            self.system.radius = float(self.var_radius.get())
+            self.system.temp = float(self.var_temp.get())
+            self.system.dt = float(self.var_dt.get())
+            self.system.friction_gamma = float(self.var_gamma.get())
+
+            p = self.system.params
+            p.kind = str(self.var_pot_kind.get())
+            p.epsilon = float(self.var_eps.get())
+            p.sigma = float(self.var_sigma.get())
+            p.De = float(self.var_De.get())
+            p.a = float(self.var_a.get())
+            p.r0 = float(self.var_r0.get())
+            p.k = float(self.var_k.get())
+
+            # Применяем — пересоздаём начальные условия
+            self._on_reset(None)
+        except Exception as e:
+            print("Ошибка при применении настроек:", e)
 
     def _draw_vessel_patch(self):
         if self.vessel_patch is not None:
@@ -1088,6 +1264,7 @@ class SimulationApp:
         if self.running:
             self.system.step()
             self._redraw_particles()
+            self.canvas.draw_idle()
 
         if (frame % self.HIST_EVERY) == 0:
             self._update_hists()
@@ -1101,59 +1278,6 @@ class SimulationApp:
             self._start_time = time.time()
 
         return []
-
-@njit(fastmath=True, cache=True)
-def reflect_poly_numba(pos: np.ndarray, vel: np.ndarray, poly: np.ndarray, radius: float):
-    """Отражение от полигонального сосуда с использованием Numba"""
-    n_vertices = len(poly)
-    min_dist = 1e10
-    normal_x = 0.0
-    normal_y = 0.0
-    
-    # Проверяем каждый отрезок полигона
-    for i in range(n_vertices):
-        j = (i + 1) % n_vertices
-        
-        # Векторы для текущего отрезка
-        edge_x = poly[j,0] - poly[i,0]
-        edge_y = poly[j,1] - poly[i,1]
-        edge_len = np.sqrt(edge_x*edge_x + edge_y*edge_y)
-        
-        if edge_len < 1e-10:
-            continue
-            
-        # Нормализованная нормаль к отрезку
-        nx = -edge_y / edge_len
-        ny = edge_x / edge_len
-        
-        # Вектор от точки до начала отрезка
-        dx = pos[0] - poly[i,0]
-        dy = pos[1] - poly[i,1]
-        
-        # Проекция на нормаль (расстояние до прямой)
-        dist = abs(dx*nx + dy*ny)
-        
-        # Проекция на отрезок
-        t = (dx*edge_x + dy*edge_y) / edge_len
-        
-        # Если проекция попадает на отрезок и расстояние минимально
-        if 0 <= t <= edge_len and dist < min_dist:
-            min_dist = dist
-            normal_x = nx
-            normal_y = ny
-    
-    # Если частица слишком близко к стенке - отражаем
-    if min_dist < radius + 1e-6:
-        # Отражение скорости
-        dot = vel[0]*normal_x + vel[1]*normal_y
-        vel[0] -= 2.0 * dot * normal_x
-        vel[1] -= 2.0 * dot * normal_y
-        
-        # Корректировка позиции
-        pos[0] += (radius - min_dist) * normal_x
-        pos[1] += (radius - min_dist) * normal_y
-        
-    return pos, vel
 
 def run_simulation(parent_frame, on_back=None):
     # Add callback parameter
