@@ -1,7 +1,6 @@
 # Improved and fixed version of the particle-distance simulation GUI
-# - Fixed bugs (vessel-kind mappings, canvas redraw, missing attributes)
-# - Cleaned up UI labels and behavior
-# - Small visual improvements
+# - dt is now fixed (0.2) and not user-editable
+# - field 'm' added to settings for particle mass
 
 import sys
 import os
@@ -69,22 +68,6 @@ class Vessel:
         return (-1, -1, 1, 1)
 
 
-#Для проведения тестов (правильно ли работает приложение)
-'''
-@njit(fastmath=True, cache=True)
-def compute_forces_numba(pos, params_kind, k, epsilon, sigma, De, a, r0, rcut_lr, mass):
-    N = pos.shape[0]
-    F = np.zeros((N, 2), dtype=np.float64)
-
-    # Вместо реальных сил даём большие искусственные силы
-    for i in range(N):
-        F[i, 0] = 1e3  # Сильное "выталкивание" вправо
-        F[i, 1] = 1e3  # Сильное "выталкивание" вверх
-
-    return F
-
-'''
-
 @njit(fastmath=True, cache=True)
 def compute_forces_numba(pos, params_kind, k, epsilon, sigma, De, a, r0, rcut_lr, mass):
     N = pos.shape[0]
@@ -147,6 +130,7 @@ def compute_forces_numba(pos, params_kind, k, epsilon, sigma, De, a, r0, rcut_lr
 
     return F
 
+
 @njit(fastmath=True, cache=True)
 def pairwise_distances_fast_numba(pos, max_pairs=10000):
     N = pos.shape[0]
@@ -155,7 +139,6 @@ def pairwise_distances_fast_numba(pos, max_pairs=10000):
 
     total_pairs = N * (N - 1) // 2
     if total_pairs <= max_pairs:
-        # Все пары
         distances = np.zeros(total_pairs, dtype=np.float64)
         idx = 0
         for i in range(N):
@@ -166,10 +149,9 @@ def pairwise_distances_fast_numba(pos, max_pairs=10000):
                 idx += 1
         return distances
     else:
-        # Случайная выборка
         distances = np.zeros(max_pairs, dtype=np.float64)
         count = 0
-        for k in range(max_pairs * 2):  # Запас для дубликатов
+        for k in range(max_pairs * 2):
             i = np.random.randint(0, N)
             j = np.random.randint(0, N)
             if i < j:
@@ -239,7 +221,7 @@ class System:
     N: int = 50
     radius: float = 0.015
     temp: float = 0.5
-    dt: float = 0.002
+    dt: float = 0.002  # fixed integration timestep (user cannot change)
     params: PotentialParams = field(default_factory=PotentialParams)
     mass: float = 1.0
     friction_gamma: float = 0.0
@@ -260,7 +242,6 @@ class System:
         self.F = np.zeros((self.N, 2), dtype=np.float64)
         self.F_old = np.zeros((self.N, 2), dtype=np.float64)
 
-        # Оптимизированная инициализация позиций
         bounds = self.vessel.bounds()
         xmin, ymin, xmax, ymax = bounds
 
@@ -276,7 +257,7 @@ class System:
                     ang = rng.uniform(0, 2 * np.pi)
                     rad = math.sqrt(rng.uniform(0, (R - self.radius) ** 2))
                     p = np.array([cx, cy]) + rad * np.array([math.cos(ang), math.sin(ang)])
-                else:  # Многоугольник
+                else:
                     p = np.array([
                         rng.uniform(xmin + self.radius, xmax - self.radius),
                         rng.uniform(ymin + self.radius, ymax - self.radius)
@@ -286,9 +267,8 @@ class System:
                     self.pos[i] = p
                     break
             else:
-                self.pos[i] = np.array([0.0, 0.0])  # Fallback
+                self.pos[i] = np.array([0.0, 0.0])
 
-        # Инициализация скоростей
         sigma_v = math.sqrt(self.temp / max(self.mass, 1e-12))
         self.vel = rng.normal(0.0, sigma_v, size=(self.N, 2))
         print("Seeded system: N =", self.N, "pos[0] =", self.pos[0], "vel[0] =", self.vel[0])
@@ -315,11 +295,9 @@ class System:
         N = self.n()
         F_new = self.compute_forces()
 
-        # Velocity Verlet
         vel_half = self.vel + 0.5 * (F_new + self.F_old) / self.mass * self.dt
         pos_new = self.pos + vel_half * self.dt
 
-        # Отражение от стенок
         if self.vessel.kind in ("rect", "Прямоугольник"):
             xmin, ymin, xmax, ymax = self.vessel.rect
             reflect_rectangular(pos_new, vel_half, self.radius, xmin, ymin, xmax, ymax)
@@ -327,14 +305,11 @@ class System:
             cx, cy, R = self.vessel.circle
             reflect_circular(pos_new, vel_half, self.radius, cx, cy, R)
         elif self.vessel.kind in ("poly", "Многоугольник") and self.vessel.poly is not None:
-            # Для многоугольника используем оригинальную логику
             self._reflect_polygonal(pos_new, vel_half)
         else:
-            # Fallback для неизвестных типов
             xmin, ymin, xmax, ymax = self.vessel.bounds()
             reflect_rectangular(pos_new, vel_half, self.radius, xmin, ymin, xmax, ymax)
 
-        # Демпфирование
         if self.friction_gamma > 0:
             damp = math.exp(-self.friction_gamma * self.dt)
             vel_new = vel_half * damp
@@ -346,7 +321,6 @@ class System:
         self.vel[:] = vel_new
 
     def _reflect_polygonal(self, pos_new, vel_half):
-        # Оригинальная логика для многоугольников
         poly = self.vessel.poly
         n = len(poly)
         N = self.n()
@@ -593,12 +567,14 @@ class SimulationWidget(QtWidgets.QWidget):
         self.edit_T.setSingleStep(0.1);
         self.edit_T.setValue(0.5)
         add_row("T", self.edit_T, "kT", "Температура (в единицах)")
-        self.edit_dt = QtWidgets.QDoubleSpinBox();
-        self.edit_dt.setRange(1e-6, 1.0)
-        self.edit_dt.setSingleStep(0.0005);
-        self.edit_dt.setDecimals(6)
-        self.edit_dt.setValue(0.002)
-        add_row("dt", self.edit_dt, "пс", "Шаг интегрирования")
+
+        # Removed dt input: dt is fixed at 0.2
+        # New: mass input (m)
+        self.edit_m = QtWidgets.QDoubleSpinBox();
+        self.edit_m.setRange(0.01, 100.0);
+        self.edit_m.setSingleStep(0.1);
+        self.edit_m.setValue(1.0)
+        add_row("m", self.edit_m, "ед", "Масса частицы")
 
         pot_box = QtWidgets.QComboBox();
         pot_box.addItems(["Нет", "Отталкивание", "Притяжение", "Леннард-Джонс", "Морзе"])
@@ -688,14 +664,13 @@ class SimulationWidget(QtWidgets.QWidget):
         self.draw_mode = False
         self.poly_points = []
 
-    def _init_simulation(self, N=100, radius=0.03, temp=0.5, dt=0.002,
+    def _init_simulation(self, N=100, radius=0.03, temp=0.5, dt=0.2,
                          vessel_kind="Прямоугольник", poly=None,
-                         potential_params=None):
+                         potential_params=None, mass=1.0):
 
         if potential_params is None:
             potential_params = PotentialParams()
 
-        # Создаем vessel
         if vessel_kind in ("rect", "Прямоугольник"):
             vessel = Vessel(kind="Прямоугольник", rect=(-1, -1, 1, 1))
         elif vessel_kind in ("circle", "Круг"):
@@ -707,20 +682,16 @@ class SimulationWidget(QtWidgets.QWidget):
         else:
             vessel = Vessel(kind="Прямоугольник", rect=(-1, -1, 1, 1))
 
-        print("Прошли вессели")
-
-        # Инициализируем систему
         self.system = System(
             vessel=vessel,
             N=N,
             radius=radius,
             temp=temp,
             dt=dt,
-            params=potential_params
+            params=potential_params,
+            mass=mass
         )
-        print("Проинициализировали")
         self.system.seed()
-        print("Сид")
 
         if hasattr(self, 'scat') and self.scat is not None:
             self.scat.remove()
@@ -728,17 +699,6 @@ class SimulationWidget(QtWidgets.QWidget):
         scatter_s = max(2.0, (radius * 1000) ** 2)
         self.scat = self.ax_anim.scatter(self.system.pos[:, 0], self.system.pos[:, 1],
                                          s=scatter_s, c="#215a93", edgecolors='k', linewidths=0.4)
-
-        '''
-        # Scatter и канвас создаем только если они еще не существуют
-        if not hasattr(self, 'scat'):
-            scatter_s = max(2.0, (radius * 1000) ** 2)
-            self.scat = self.ax_anim.scatter(self.system.pos[:, 0], self.system.pos[:, 1],
-                                             s=scatter_s, c="#215a93", edgecolors='k', linewidths=0.4)
-        else:
-            self.scat.set_offsets(self.system.pos)
-            self.scat.set_sizes(np.full(self.system.N, max(2.0, (radius * 1000) ** 2)))
-        '''
 
         self._draw_vessel_patch()
         self.ax_anim.relim()
@@ -761,28 +721,24 @@ class SimulationWidget(QtWidgets.QWidget):
                 return
             self.system.integrate()
 
-            # Обновляем частицы каждый кадр
             self._redraw_particles()
 
-            # Обновляем гистограммы реже для производительности
             current_time = time.time()
             if not hasattr(self, '_last_hist_update'):
                 self._last_hist_update = 0
 
-            if current_time - self._last_hist_update > 0.3:  # Каждые 300ms
+            if current_time - self._last_hist_update > 0.3:
                 self._update_histograms()
                 self._last_hist_update = current_time
 
     def _redraw_particles(self):
-        # Используем прямую установку данных для скорости
         if hasattr(self, 'scat') and self.system.pos is not None:
             self.scat.set_offsets(self.system.pos)
-            # Ограничиваем частоту перерисовки canvas
             if not hasattr(self, '_last_canvas_update'):
                 self._last_canvas_update = 0
 
             current_time = time.time()
-            if current_time - self._last_canvas_update > 0.033:  # ~30 FPS
+            if current_time - self._last_canvas_update > 0.033:
                 self.canvas_anim.draw_idle()
                 self._last_canvas_update = current_time
 
@@ -811,11 +767,12 @@ class SimulationWidget(QtWidgets.QWidget):
         self.canvas_hist.draw_idle()
 
     def _apply_settings(self):
-        # Собираем параметры из UI
         N = int(self.spin_N.value())
         radius = float(self.edit_R.value())
         temp = float(self.edit_T.value())
-        dt = float(self.edit_dt.value())
+        # dt is fixed
+        dt = 0.2
+        mass = float(self.edit_m.value())
 
         pot_params = PotentialParams(
             kind=str(self.pot_box.currentText()),
@@ -829,22 +786,9 @@ class SimulationWidget(QtWidgets.QWidget):
         vessel_kind = str(self.vessel_box.currentText())
         poly = self.system.vessel.poly if vessel_kind in ("poly", "Многоугольник") else None
 
-        # Перезапускаем симуляцию с новыми параметрами
         self._init_simulation(N=N, radius=radius, temp=temp, dt=dt,
                               vessel_kind=vessel_kind, poly=poly,
-                              potential_params=pot_params)
-        '''
-        print("New system N:", self.system.N)
-        print("Positions shape:", self.system.pos.shape)
-        print("Velocities mean:", np.mean(self.system.vel, axis=0))
-        print(f"Running : {self.running}")
-
-        print("SYSTEM VELOCITIES:", self.system.vel)
-        print("SYSTEM FORCES:", self.system.F)
-        print("TIMER ACTIVE:", self.timer.isActive())
-        print(self.system.compute_forces())
-        print("=====================")
-        '''
+                              potential_params=pot_params, mass=mass)
 
         self._update_histograms()
 
