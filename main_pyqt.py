@@ -26,14 +26,14 @@ import math
 # -------------------- Physics helpers (numpy, simple, robust) --------------------
 @dataclass
 class PotentialParams:
-    kind: str = "Нет"  # 'Нет','Отталкивание','Притяжение','Леннард-Джонс','Морзе'
-    k: float = 1.0
+    kind: str = "Нет"
+    k: float = 1.0  # Верните нормальное значение
     epsilon: float = 1.0
     sigma: float = 0.02
     De: float = 1.0
     a: float = 2.0
     r0: float = 0.025
-    rcut_lr: float = 2.5
+    rcut_lr: float = 0.3  # Уменьшено, но не так радикально
 
 
 @dataclass
@@ -55,17 +55,22 @@ class Vessel:
             return bool(Path(self.poly, closed=True).contains_point((p[0], p[1])))
         return False
 
-    def bounds(self):
-        if self.kind in ("rect", "Прямоугольник"):
-            return self.rect
-        if self.kind in ("circle", "Круг"):
-            cx, cy, R = self.circle
-            return (cx - R, cy - R, cx + R, cy + R)
-        if self.kind in ("poly", "Многоугольник") and self.poly is not None:
-            xmin, ymin = self.poly.min(axis=0)
-            xmax, ymax = self.poly.max(axis=0)
-            return (xmin, ymin, xmax, ymax)
-        return (-1, -1, 1, 1)
+    def bounds(self, margin: float = 0.0): 
+        """ Возвращает границы сосуда с optional margin.
+          Args: margin: дополнительный отступ от границ (например, радиус частицы)
+         """ 
+        if self.kind in ("rect", "Прямоугольник"): 
+            xmin, ymin, xmax, ymax = self.rect 
+            return (xmin + margin, ymin + margin, xmax - margin, ymax - margin) 
+        elif self.kind in ("circle", "Круг"): 
+            cx, cy, R = self.circle 
+            return (cx - R + margin, cy - R + margin, cx + R - margin, cy + R - margin) 
+        elif self.kind in ("poly", "Многоугольник") and self.poly is not None and len(self.poly) > 0: 
+            xmin, ymin = self.poly.min(axis=0) 
+            xmax, ymax = self.poly.max(axis=0) 
+            return (xmin + margin, ymin + margin, xmax - margin, ymax - margin) 
+        else:
+            return (-1 + margin, -1 + margin, 1 - margin, 1 - margin)
 
 
 @njit(fastmath=True, cache=True)
@@ -73,14 +78,14 @@ def compute_forces_numba(pos, params_kind, k, epsilon, sigma, De, a, r0, rcut_lr
     N = pos.shape[0]
     F = np.zeros((N, 2), dtype=np.float64)
 
-    # Предварительные вычисления
+ # Предварительные вычисления
     rcut = 0.0
     if params_kind == 3:  # Леннард-Джонс
         rcut = 2.5 * max(sigma, 1e-6)
     elif params_kind == 4:  # Морзе
         rcut = r0 + max(3.0 / a, 0.05)
     elif params_kind in (1, 2):  # Отталкивание/Притяжение
-        rcut = rcut_lr
+        rcut = rcut_lr  # Теперь это разумное значение ~0.2
 
     rcut2 = rcut * rcut if rcut > 0 else 1e10
     rmin = 0.1 * sigma if sigma > 0 else 1e-4
@@ -108,8 +113,10 @@ def compute_forces_numba(pos, params_kind, k, epsilon, sigma, De, a, r0, rcut_lr
             mag = 0.0
             if params_kind == 1:  # Отталкивание
                 mag = k / r2
+                # УДАЛЕНО ограничение силы - теперь не нужно
             elif params_kind == 2:  # Притяжение
                 mag = -k / r2
+                # УДАЛЕНО ограничение силы
             elif params_kind == 3:  # Леннард-Джонс
                 sr = sigma / r
                 sr6 = sr * sr * sr * sr * sr * sr
@@ -165,7 +172,7 @@ def pairwise_distances_fast_numba(pos, max_pairs=10000):
 
 
 @njit(fastmath=True, cache=True)
-def reflect_rectangular(pos, vel, radius, xmin, ymin, xmax, ymax):
+def reflect_rectangular_numba(pos, vel, radius, xmin, ymin, xmax, ymax):
     N = pos.shape[0]
     for i in range(N):
         p = pos[i]
@@ -189,7 +196,7 @@ def reflect_rectangular(pos, vel, radius, xmin, ymin, xmax, ymax):
 
 
 @njit(fastmath=True, cache=True)
-def reflect_circular(pos, vel, radius, cx, cy, R):
+def reflect_circular_numba(pos, vel, radius, cx, cy, R):
     N = pos.shape[0]
     R_eff = R - radius
 
@@ -211,6 +218,92 @@ def reflect_circular(pos, vel, radius, cx, cy, R):
                 p[0] = cx + nx * R_eff
                 p[1] = cy + ny * R_eff
 
+        pos[i] = p
+        vel[i] = v
+
+
+@njit(fastmath=True, cache=True)
+def reflect_polygonal_numba(pos, vel, radius, poly):
+    """
+    Отражает частицы от границ полигона с учётом радиуса.
+    Упрощённая и исправленная версия.
+    """
+    N = pos.shape[0]
+    M = poly.shape[0]
+    
+    for i in range(N):
+        p = pos[i]
+        v = vel[i]
+        
+        # Проверяем все рёбра полигона
+        for a in range(M):
+            b = (a + 1) % M
+            
+            # Координаты начала и конца ребра
+            x1, y1 = poly[a]
+            x2, y2 = poly[b]
+            
+            # Вектор ребра
+            edge_x = x2 - x1
+            edge_y = y2 - y1
+            edge_length = math.sqrt(edge_x * edge_x + edge_y * edge_y)
+            
+            if edge_length < 1e-12:
+                continue
+                
+            # Нормализованный вектор ребра
+            edge_x /= edge_length
+            edge_y /= edge_length
+            
+            # Нормаль к ребру (направлена ВНУТРЬ полигона)
+            # Для правильного полигона (вершины по часовой стрелке) нормаль направлена внутрь
+            normal_x = -edge_y
+            normal_y = edge_x
+            
+            # Вектор от начала ребра к частице
+            to_particle_x = p[0] - x1
+            to_particle_y = p[1] - y1
+            
+            # Расстояние от частицы до ребра (со знаком)
+            distance = to_particle_x * normal_x + to_particle_y * normal_y
+            
+            # Если частица вышла за границу (учитывая радиус)
+            if distance < radius:
+                # Проекция точки на ребро
+                t = (to_particle_x * edge_x + to_particle_y * edge_y) / edge_length
+                t = min(max(t, 0.0), 1.0)
+                
+                # Ближайшая точка на ребре
+                closest_x = x1 + t * (x2 - x1)
+                closest_y = y1 + t * (y2 - y1)
+                
+                # Вектор от ближайшей точки к частице
+                dx = p[0] - closest_x
+                dy = p[1] - closest_y
+                dist_to_edge = math.sqrt(dx * dx + dy * dy)
+                
+                if dist_to_edge < 1e-12:
+                    # Если частица точно на ребре, используем вычисленную нормаль
+                    norm_length = math.sqrt(normal_x * normal_x + normal_y * normal_y)
+                    if norm_length > 1e-12:
+                        normal_x /= norm_length
+                        normal_y /= norm_length
+                else:
+                    # Нормаль от ребра к частице
+                    normal_x = dx / dist_to_edge
+                    normal_y = dy / dist_to_edge
+                
+                # Отражение скорости
+                dot = v[0] * normal_x + v[1] * normal_y
+                if dot < 0:  # Только если движется наружу
+                    v[0] -= 2.0 * dot * normal_x
+                    v[1] -= 2.0 * dot * normal_y
+                
+                # Сдвигаем частицу внутрь
+                overlap = radius - distance
+                p[0] += overlap * normal_x
+                p[1] += overlap * normal_y
+        
         pos[i] = p
         vel[i] = v
 
@@ -237,41 +330,55 @@ class System:
     def seed(self, rng=None):
         if rng is None:
             rng = np.random.default_rng()
+
+        # Инициализация массивов
         self.pos = np.zeros((self.N, 2), dtype=np.float64)
         self.vel = np.zeros((self.N, 2), dtype=np.float64)
         self.F = np.zeros((self.N, 2), dtype=np.float64)
         self.F_old = np.zeros((self.N, 2), dtype=np.float64)
 
-        bounds = self.vessel.bounds()
-        xmin, ymin, xmax, ymax = bounds
+        # Границы сосуда с учётом радиуса частиц
+        xmin, ymin, xmax, ymax = self.vessel.bounds(margin=self.radius)
 
         for i in range(self.N):
             for attempt in range(1000):
+                # Прямоугольник
                 if self.vessel.kind in ("rect", "Прямоугольник"):
                     p = np.array([
                         rng.uniform(xmin + self.radius, xmax - self.radius),
                         rng.uniform(ymin + self.radius, ymax - self.radius)
                     ])
+                # Круг
                 elif self.vessel.kind in ("circle", "Круг"):
                     cx, cy, R = self.vessel.circle
                     ang = rng.uniform(0, 2 * np.pi)
-                    rad = math.sqrt(rng.uniform(0, (R - self.radius) ** 2))
+                    rad = math.sqrt(rng.uniform(0, (R - self.radius) ** 2))  # равномерно по площади
                     p = np.array([cx, cy]) + rad * np.array([math.cos(ang), math.sin(ang)])
+                # Многоугольник (пока как прямоугольник, можно улучшить later)
                 else:
                     p = np.array([
                         rng.uniform(xmin + self.radius, xmax - self.radius),
                         rng.uniform(ymin + self.radius, ymax - self.radius)
                     ])
 
+                # Проверка, что точка внутри сосуда
                 if self.vessel.contains(p):
-                    self.pos[i] = p
-                    break
+                    # Проверка на пересечение с другими частицами
+                    if i == 0 or np.all(np.linalg.norm(self.pos[:i] - p, axis=1) >= 2 * self.radius):
+                        self.pos[i] = p
+                        break
             else:
+                # Если не удалось разместить после 1000 попыток — ставим в центр
                 self.pos[i] = np.array([0.0, 0.0])
+                print(f"Warning: Particle {i} placed at center due to placement conflicts.")
 
+        # Инициализация скоростей с нормальным распределением
         sigma_v = math.sqrt(self.temp / max(self.mass, 1e-12))
         self.vel = rng.normal(0.0, sigma_v, size=(self.N, 2))
-        print("Seeded system: N =", self.N, "pos[0] =", self.pos[0], "vel[0] =", self.vel[0])
+
+        # Отладочный вывод
+        print(f"Seeded system: N = {self.N}, pos[0] = {self.pos[0]}, vel[0] = {self.vel[0]}")
+
 
     def compute_forces(self):
         if self.pos is None:
@@ -289,27 +396,32 @@ class System:
             print("Integrate: pos is None")
             return
 
-        if np.all(self.vel == 0):
-            print("Warning: all velocities are zero!")
-
         N = self.n()
         F_new = self.compute_forces()
 
+        # 1. Вычисляем промежуточную скорость и позицию
         vel_half = self.vel + 0.5 * (F_new + self.F_old) / self.mass * self.dt
         pos_new = self.pos + vel_half * self.dt
 
+        # 2. Обрабатываем столкновения со стенками
         if self.vessel.kind in ("rect", "Прямоугольник"):
             xmin, ymin, xmax, ymax = self.vessel.rect
-            reflect_rectangular(pos_new, vel_half, self.radius, xmin, ymin, xmax, ymax)
+            collisions = reflect_rectangular_numba(pos_new, vel_half, self.radius, xmin, ymin, xmax, ymax)
         elif self.vessel.kind in ("circle", "Круг"):
             cx, cy, R = self.vessel.circle
-            reflect_circular(pos_new, vel_half, self.radius, cx, cy, R)
+            collisions = reflect_circular_numba(pos_new, vel_half, self.radius, cx, cy, R)
         elif self.vessel.kind in ("poly", "Многоугольник") and self.vessel.poly is not None:
-            self._reflect_polygonal(pos_new, vel_half)
+            collisions = reflect_polygonal_numba(pos_new, vel_half, self.radius, self.vessel.poly)
         else:
             xmin, ymin, xmax, ymax = self.vessel.bounds()
-            reflect_rectangular(pos_new, vel_half, self.radius, xmin, ymin, xmax, ymax)
+            collisions = reflect_rectangular_numba(pos_new, vel_half, self.radius, xmin, ymin, xmax, ymax)
 
+        # 3. Если есть столкновения, пересчитываем позицию
+        # if collisions > 0:
+            # Пересчитываем позицию с учетом отраженной скорости
+            # pos_new = self.pos + vel_half * self.dt
+
+        # 4. Демпфирование
         if self.friction_gamma > 0:
             damp = math.exp(-self.friction_gamma * self.dt)
             vel_new = vel_half * damp
@@ -319,51 +431,6 @@ class System:
         self.F_old[:] = F_new
         self.pos[:] = pos_new
         self.vel[:] = vel_new
-
-    def _reflect_polygonal(self, pos_new, vel_half):
-        poly = self.vessel.poly
-        n = len(poly)
-        N = self.n()
-
-        for i in range(N):
-            p = pos_new[i]
-            v = vel_half[i]
-            min_dist = 1e9
-            nx, ny = 0, 0
-
-            for a in range(n):
-                b = (a + 1) % n
-                ex = poly[b, 0] - poly[a, 0]
-                ey = poly[b, 1] - poly[a, 1]
-                elen = math.sqrt(ex * ex + ey * ey)
-                if elen < 1e-9:
-                    continue
-
-                tx = p[0] - poly[a, 0]
-                ty = p[1] - poly[a, 1]
-                proj = (tx * ex + ty * ey) / (elen * elen)
-
-                if 0 <= proj <= 1:
-                    px = poly[a, 0] + proj * ex
-                    py = poly[a, 1] + proj * ey
-                    dx = p[0] - px
-                    dy = p[1] - py
-                    dist = math.sqrt(dx * dx + dy * dy)
-
-                    if dist < min_dist:
-                        min_dist = dist
-                        nx = -ey / elen
-                        ny = ex / elen
-
-            if min_dist < self.radius:
-                dot = v[0] * nx + v[1] * ny
-                v[0] -= 2.0 * dot * nx
-                v[1] -= 2.0 * dot * ny
-                p[0] += (self.radius - min_dist) * nx
-                p[1] += (self.radius - min_dist) * ny
-
-            pos_new[i] = p
-            vel_half[i] = v
 
     def pairwise_distances_fast(self, max_pairs=10000):
         if self.pos is None or self.n() < 2:
@@ -541,67 +608,68 @@ class SimulationWidget(QtWidgets.QWidget):
             lbl = QtWidgets.QLabel(label)
             lbl.setFixedWidth(80)
             if help_text:
-                h = QtWidgets.QLabel(help_text);
-                h.setWordWrap(True);
+                h = QtWidgets.QLabel(help_text)
+                h.setWordWrap(True)
                 h.setStyleSheet("color:#555;font-size:9pt;margin-top:2px;")
                 sp_layout.addWidget(h)
             row.addWidget(lbl)
             row.addWidget(widget)
             if unit:
-                u = QtWidgets.QLabel(unit);
+                u = QtWidgets.QLabel(unit)
                 u.setFixedWidth(80)
                 row.addWidget(u)
             sp_layout.addLayout(row)
 
-        self.spin_N = QtWidgets.QSpinBox();
-        self.spin_N.setRange(5, 500);
+        self.spin_N = QtWidgets.QSpinBox()
+        self.spin_N.setRange(5, 500)
         self.spin_N.setValue(100)
         add_row("N", self.spin_N, "шт", "Число частиц")
-        self.edit_R = QtWidgets.QDoubleSpinBox();
-        self.edit_R.setRange(0.003, 0.12);
-        self.edit_R.setSingleStep(0.001);
-        self.edit_R.setValue(0.03)
+        self.edit_R = QtWidgets.QDoubleSpinBox()
+        self.edit_R.setRange(0.003, 0.12)
+        self.edit_R.setSingleStep(0.001)
+        self.edit_R.setDecimals(3)
+        self.edit_R.setValue(0.02)
         add_row("R", self.edit_R, "ед", "Радиус частицы (визуальная единица)")
-        self.edit_T = QtWidgets.QDoubleSpinBox();
-        self.edit_T.setRange(0.01, 5.0);
-        self.edit_T.setSingleStep(0.1);
+        self.edit_T = QtWidgets.QDoubleSpinBox()
+        self.edit_T.setRange(0.01, 5.0)
+        self.edit_T.setSingleStep(0.1)
         self.edit_T.setValue(0.5)
         add_row("T", self.edit_T, "kT", "Температура (в единицах)")
 
         # Removed dt input: dt is fixed at 0.2
         # New: mass input (m)
-        self.edit_m = QtWidgets.QDoubleSpinBox();
-        self.edit_m.setRange(0.01, 100.0);
-        self.edit_m.setSingleStep(0.1);
+        self.edit_m = QtWidgets.QDoubleSpinBox()
+        self.edit_m.setRange(0.01, 100.0)
+        self.edit_m.setSingleStep(0.1)
         self.edit_m.setValue(1.0)
         add_row("m", self.edit_m, "ед", "Масса частицы")
 
-        pot_box = QtWidgets.QComboBox();
+        pot_box = QtWidgets.QComboBox()
         pot_box.addItems(["Нет", "Отталкивание", "Притяжение", "Леннард-Джонс", "Морзе"])
         self.pot_box = pot_box
         add_row("Pot", pot_box, "", "Тип парного потенциала")
-        self.edit_eps = QtWidgets.QDoubleSpinBox();
-        self.edit_eps.setRange(0.0, 50.0);
+        self.edit_eps = QtWidgets.QDoubleSpinBox()
+        self.edit_eps.setRange(0.0, 50.0)
         self.edit_eps.setValue(1.0)
         add_row("ε", self.edit_eps, "кДж/моль", "Энергетический масштаб")
-        self.edit_sigma = QtWidgets.QDoubleSpinBox();
-        self.edit_sigma.setRange(0.001, 0.2);
+        self.edit_sigma = QtWidgets.QDoubleSpinBox()
+        self.edit_sigma.setRange(0.001, 0.2)
         self.edit_sigma.setValue(0.02)
         add_row("σ", self.edit_sigma, "ед", "Характерное расстояние LJ")
-        self.edit_De = QtWidgets.QDoubleSpinBox();
-        self.edit_De.setRange(0.0, 50.0);
+        self.edit_De = QtWidgets.QDoubleSpinBox()
+        self.edit_De.setRange(0.0, 50.0)
         self.edit_De.setValue(1.0)
         add_row("De", self.edit_De, "кДж/моль", "Глубина ямы Morse")
-        self.edit_a = QtWidgets.QDoubleSpinBox();
-        self.edit_a.setRange(0.1, 50.0);
+        self.edit_a = QtWidgets.QDoubleSpinBox()
+        self.edit_a.setRange(0.1, 50.0)
         self.edit_a.setValue(2.0)
         add_row("a", self.edit_a, "1/ед", "Жёсткость Morse")
-        self.edit_r0 = QtWidgets.QDoubleSpinBox();
-        self.edit_r0.setRange(0.001, 0.5);
+        self.edit_r0 = QtWidgets.QDoubleSpinBox()
+        self.edit_r0.setRange(0.001, 0.5)
         self.edit_r0.setValue(0.025)
         add_row("r₀", self.edit_r0, "ед", "Равновесное расстояние (Morse)")
 
-        vessel_box = QtWidgets.QComboBox();
+        vessel_box = QtWidgets.QComboBox()
         vessel_box.addItems(["Прямоугольник", "Круг", "Многоугольник"])
         self.vessel_box = vessel_box
         add_row("Сосуд", vessel_box, "", "Форма сосуда")
@@ -664,9 +732,9 @@ class SimulationWidget(QtWidgets.QWidget):
         self.draw_mode = False
         self.poly_points = []
 
-    def _init_simulation(self, N=100, radius=0.03, temp=0.5, dt=0.2,
-                         vessel_kind="Прямоугольник", poly=None,
-                         potential_params=None, mass=1.0):
+    def _init_simulation(self, N=50, radius=0.02, temp=0.3, dt=0.002,  # temp = 0.3 вместо 0.1
+                     vessel_kind="Прямоугольник", poly=None,
+                     potential_params=None, mass=1.0):
 
         if potential_params is None:
             potential_params = PotentialParams()
@@ -743,35 +811,43 @@ class SimulationWidget(QtWidgets.QWidget):
                 self._last_canvas_update = current_time
 
     def _update_histograms(self):
-        self.ax_histx.cla()
-        self.ax_histy.cla()
-        self.ax_histd.cla()
+         # ===== Очистка осей =====
+        for ax in (self.ax_histx, self.ax_histy, self.ax_histd):
+            ax.cla()
+            ax.set_facecolor("#f9f9f9")  # светлый фон
+            ax.grid(True, linestyle='--', alpha=0.3)  # лёгкая сетка
+            ax.tick_params(labelsize=9)
 
-        x = self.system.pos[:, 0];
+        # ===== Гистограмма X =====
+        x = self.system.pos[:, 0]
+        self.ax_histx.hist(x, bins=36, density=True, color="#8bb7d7", alpha=0.8)
+        self.ax_histx.set_ylabel("p(x)", labelpad=5)
+        self.ax_histx.set_title("Распределение X", fontsize=10, fontweight='bold')
+
+        # ===== Гистограмма Y =====
         y = self.system.pos[:, 1]
-        self.ax_histx.hist(x, bins=36, density=True, alpha=0.8)
-        self.ax_histx.set_ylabel("p(x)")
-        self.ax_histx.grid(alpha=0.25)
+        self.ax_histy.hist(y, bins=36, density=True, color="#f9ad6c", alpha=0.8)
+        self.ax_histy.set_ylabel("p(y)", labelpad=5)
+        self.ax_histy.set_title("Распределение Y", fontsize=10, fontweight='bold')
 
-        self.ax_histy.hist(y, bins=36, density=True, alpha=0.8)
-        self.ax_histy.set_ylabel("p(y)")
-        self.ax_histy.grid(alpha=0.25)
-
+        # ===== Гистограмма расстояний =====
         dists = self.system.pairwise_distances_fast(max_pairs=5000)
         if dists.size > 0:
-            self.ax_histd.hist(dists, bins=36, density=True, alpha=0.85)
-        self.ax_histd.set_ylabel("p(r)")
+            self.ax_histd.hist(dists, bins=36, density=True, color="#8dd38d", alpha=0.85)
+        self.ax_histd.set_ylabel("p(r)", labelpad=5)
         self.ax_histd.set_xlabel("r")
-        self.ax_histd.grid(alpha=0.2)
+        self.ax_histd.set_title("Распределение расстояний", fontsize=10, fontweight='bold')
 
+        # ===== Обновление канваса =====
         self.canvas_hist.draw_idle()
+
 
     def _apply_settings(self):
         N = int(self.spin_N.value())
         radius = float(self.edit_R.value())
         temp = float(self.edit_T.value())
         # dt is fixed
-        dt = 0.2
+        dt = 0.002
         mass = float(self.edit_m.value())
 
         pot_params = PotentialParams(
@@ -850,18 +926,18 @@ class SimulationWidget(QtWidgets.QWidget):
         if v.kind in ("rect", "Прямоугольник"):
             xmin, ymin, xmax, ymax = v.rect
             self.vessel_artist = patches.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, lw=2, ec="#444")
-            self.ax_anim.set_xlim(xmin - 0.1, xmax + 0.1);
+            self.ax_anim.set_xlim(xmin - 0.1, xmax + 0.1)
             self.ax_anim.set_ylim(ymin - 0.1, ymax + 0.1)
         elif v.kind in ("circle", "Круг"):
             cx, cy, R = v.circle
             self.vessel_artist = patches.Circle((cx, cy), R, fill=False, lw=2, ec="#444")
-            self.ax_anim.set_xlim(cx - R - 0.1, cx + R + 0.1);
+            self.ax_anim.set_xlim(cx - R - 0.1, cx + R + 0.1)
             self.ax_anim.set_ylim(cy - R - 0.1, cy + R + 0.1)
         elif v.kind in ("poly", "Многоугольник") and v.poly is not None:
             self.vessel_artist = patches.Polygon(v.poly, closed=True, fill=False, lw=2, ec="#444")
-            xmin, ymin = v.poly.min(axis=0);
+            xmin, ymin = v.poly.min(axis=0)
             xmax, ymax = v.poly.max(axis=0)
-            self.ax_anim.set_xlim(xmin - 0.1, xmax + 0.1);
+            self.ax_anim.set_xlim(xmin - 0.1, xmax + 0.1)
             self.ax_anim.set_ylim(ymin - 0.1, ymax + 0.1)
         else:
             self.vessel_artist = None
