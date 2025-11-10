@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow
 from PyQt6.QtCore import Qt
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-#from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+# from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 from matplotlib import patches
 
@@ -367,7 +367,7 @@ def reflect_polygonal_numba(pos, vel, radius, poly):
 @dataclass
 class System:
     vessel: Vessel
-    N: int = 100
+    N: int = 10
     radius: float = 0.03  # ФИЗИЧЕСКИЙ радиус для столкновений
     visual_radius: float = 0.03  # ВИЗУАЛЬНЫЙ радиус для отрисовки
     temp: float = 0.5
@@ -376,6 +376,11 @@ class System:
     mass: float = 1.0
     friction_gamma: float = 0.0
     enable_collisions: bool = True
+
+    # NEW ↓↓↓
+    interaction_step: int = 10  # считать силы/столкновения каждые k итераций
+    step: int = 0  # внутренний счётчик шагов
+    # NEW ↑↑↑
 
     pos: np.ndarray | None = None
     vel: np.ndarray | None = None
@@ -599,21 +604,27 @@ class System:
             scale_factors = max_speed / speeds[too_fast]
             self.vel[too_fast] *= scale_factors[:, np.newaxis]
 
-        N = self.n()
-        F_new = self.compute_forces()
+        # NEW: редкое обновление взаимодействий
+        self.step += 1
+        do_interact = (self.step % max(1, self.interaction_step) == 0)
 
-        # Проверка на слишком большие силы
-        force_magnitudes = np.linalg.norm(F_new, axis=1)
-        max_force = 100.0
-        if np.any(force_magnitudes > max_force):
-            scale = max_force / np.max(force_magnitudes)
-            F_new *= scale
+        if do_interact:
+            F_new = self.compute_forces()
+            # Клип по силам
+            force_magnitudes = np.linalg.norm(F_new, axis=1)
+            max_force = 100.0
+            if np.any(force_magnitudes > max_force):
+                scale = max_force / np.max(force_magnitudes)
+                F_new *= scale
+        else:
+            # используем последнюю известную силу (F_old)
+            F_new = self.F_old if self.F_old is not None else np.zeros_like(self.vel)
 
-        # Интегрирование
-        vel_half = self.vel + 0.5 * (F_new + self.F_old) / self.mass * self.dt
+        # Интегрирование (верле/полушаг)
+        vel_half = self.vel + 0.5 * (F_new + (self.F_old if self.F_old is not None else 0.0)) / self.mass * self.dt
         pos_new = self.pos + vel_half * self.dt
 
-        # Обработка столкновений со стенками
+        # Отражения от стенок
         if self.vessel.kind in ("rect", "Прямоугольник"):
             xmin, ymin, xmax, ymax = self.vessel.rect
             reflect_rectangular_numba(pos_new, vel_half, self.radius, xmin, ymin, xmax, ymax)
@@ -623,11 +634,11 @@ class System:
         elif self.vessel.kind in ("poly", "Многоугольник") and self.vessel.poly is not None:
             reflect_polygonal_numba(pos_new, vel_half, self.radius, self.vessel.poly)
 
-        # ОБРАБОТКА СТОЛКНОВЕНИЙ МЕЖДУ ЧАСТИЦАМИ
-        if self.enable_collisions:
+        # Столкновения частиц — тоже реже
+        if self.enable_collisions and do_interact:
             handle_particle_collisions(pos_new, vel_half, self.radius, self.dt)
 
-        # Обновление позиций и скоростей
+        # Обновления состояния
         self.F_old[:] = F_new
         self.pos[:] = pos_new
         self.vel[:] = vel_half
@@ -799,6 +810,7 @@ class WinCheckBox(QtWidgets.QCheckBox):
         # блокируем дублирование
         e.accept()
 
+
 class SimulationWidget(QtWidgets.QWidget):
     def __init__(self, parent, back_cb):
         super().__init__(parent)
@@ -837,8 +849,8 @@ class SimulationWidget(QtWidgets.QWidget):
             sp_layout.addLayout(row)
 
         self.spin_N = QtWidgets.QSpinBox()
-        self.spin_N.setRange(5, 500)
-        self.spin_N.setValue(100)
+        self.spin_N.setRange(5, 50)
+        self.spin_N.setValue(10)
         add_row("N", self.spin_N, "шт", "Число частиц")
         self.edit_R = QtWidgets.QDoubleSpinBox()
         self.edit_R.setRange(0.003, 0.12)
@@ -896,6 +908,12 @@ class SimulationWidget(QtWidgets.QWidget):
         vessel_box.addItems(["Прямоугольник", "Круг", "Многоугольник"])
         self.vessel_box = vessel_box
         add_row("Сосуд", vessel_box, "", "Форма сосуда")
+
+        # NEW: шаг взаимодействий
+        self.spin_interact_step = QtWidgets.QSpinBox()
+        self.spin_interact_step.setRange(1, 1000)
+        self.spin_interact_step.setValue(10)  # по умолчанию реже в 10 раз
+        add_row("Интеракции", self.spin_interact_step, "к-я итерация")
 
         sp_layout.addSpacing(8)
         btn_draw = QtWidgets.QPushButton("Рисовать полигон")
@@ -955,9 +973,9 @@ class SimulationWidget(QtWidgets.QWidget):
         self.draw_mode = False
         self.poly_points = []
 
-    def _init_simulation(self, N=100, radius=0.03, temp=0.3, dt=0.002,
+    def _init_simulation(self, N=10, radius=0.03, temp=0.3, dt=0.002,
                          vessel_kind="Прямоугольник", poly=None,
-                         potential_params=None, mass=1.0, enable_collisions=True):
+                         potential_params=None, mass=1.0, enable_collisions=True, interaction_step=10):
 
         if potential_params is None:
             potential_params = PotentialParams()
@@ -982,7 +1000,8 @@ class SimulationWidget(QtWidgets.QWidget):
             dt=dt,
             params=potential_params,
             mass=mass,
-            enable_collisions=enable_collisions
+            enable_collisions=enable_collisions,
+            interaction_step=interaction_step
         )
         self.system.seed()
 
@@ -1031,7 +1050,7 @@ class SimulationWidget(QtWidgets.QWidget):
             if not hasattr(self, '_last_hist_update'):
                 self._last_hist_update = 0
 
-            if current_time - self._last_hist_update > 0.3:
+            if current_time - self._last_hist_update > 1.5:
                 self._update_histograms()
                 self._last_hist_update = current_time
 
@@ -1081,6 +1100,7 @@ class SimulationWidget(QtWidgets.QWidget):
         dt = 0.002
         mass = float(self.edit_m.value())
         enable_collisions = self.check_collisions.isChecked()
+        interaction_step = int(self.spin_interact_step.value())
 
         pot_params = PotentialParams(
             kind=str(self.pot_box.currentText()),
@@ -1097,7 +1117,7 @@ class SimulationWidget(QtWidgets.QWidget):
         self._init_simulation(N=N, radius=radius, temp=temp, dt=dt,
                               vessel_kind=vessel_kind, poly=poly,
                               potential_params=pot_params, mass=mass,
-                              enable_collisions=enable_collisions)
+                              enable_collisions=enable_collisions, interaction_step=interaction_step)
 
         self._update_histograms()
 
