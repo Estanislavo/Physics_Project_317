@@ -110,13 +110,25 @@ def compute_forces_numba(pos, params_kind, k, epsilon, sigma, De, a, r0, rcut_lr
             nx = dx * invr
             ny = dy * invr
 
+            MAX_FORCE = 1e2  # Увеличено ограничение силы
+
             mag = 0.0
             if params_kind == 1:  # Отталкивание
                 mag = k / r2
+                if mag > MAX_FORCE:
+                    mag = MAX_FORCE
                 # УДАЛЕНО ограничение силы - теперь не нужно
             elif params_kind == 2:  # Притяжение
+                # Увеличиваем радиус обрезания для притяжения
+                rcut = 0.5  # вместо rcut_lr (~0.2)
+                rcut2 = rcut * rcut
+                if r2 > rcut2 or r2 < 1e-12:
+                    continue
+                
                 mag = -k / r2
-                # УДАЛЕНО ограничение силы
+                # Более строгое ограничение силы
+                if abs(mag) > MAX_FORCE:
+                    mag = -MAX_FORCE if mag < 0 else MAX_FORCE
             elif params_kind == 3:  # Леннард-Джонс
                 sr = sigma / r
                 sr6 = sr * sr * sr * sr * sr * sr
@@ -225,8 +237,8 @@ def reflect_circular_numba(pos, vel, radius, cx, cy, R):
 @njit(fastmath=True, cache=True)
 def reflect_polygonal_numba(pos, vel, radius, poly):
     """
-    Отражает частицы от границ полигона с учётом радиуса.
-    Упрощённая и исправленная версия.
+    Упрощённое и надёжное отражение от полигональных стенок.
+    Используем подход с проекцией на ближайшую точку полигона.
     """
     N = pos.shape[0]
     M = poly.shape[0]
@@ -235,83 +247,77 @@ def reflect_polygonal_numba(pos, vel, radius, poly):
         p = pos[i]
         v = vel[i]
         
-        # Проверяем все рёбра полигона
+        # Ищем ближайшее ребро полигона
+        min_dist = 1e10
+        closest_point = np.array([0.0, 0.0])
+        normal = np.array([0.0, 0.0])
+        
         for a in range(M):
             b = (a + 1) % M
             
-            # Координаты начала и конца ребра
+            # Точки ребра
             x1, y1 = poly[a]
             x2, y2 = poly[b]
             
             # Вектор ребра
             edge_x = x2 - x1
             edge_y = y2 - y1
-            edge_length = math.sqrt(edge_x * edge_x + edge_y * edge_y)
+            edge_length_sq = edge_x * edge_x + edge_y * edge_y
             
-            if edge_length < 1e-12:
+            if edge_length_sq < 1e-12:
                 continue
                 
-            # Нормализованный вектор ребра
-            edge_x /= edge_length
-            edge_y /= edge_length
-            
-            # Нормаль к ребру (направлена ВНУТРЬ полигона)
-            # Для правильного полигона (вершины по часовой стрелке) нормаль направлена внутрь
-            normal_x = -edge_y
-            normal_y = edge_x
-            
             # Вектор от начала ребра к частице
-            to_particle_x = p[0] - x1
-            to_particle_y = p[1] - y1
+            to_p_x = p[0] - x1
+            to_p_y = p[1] - y1
             
-            # Расстояние от частицы до ребра (со знаком)
-            distance = to_particle_x * normal_x + to_particle_y * normal_y
+            # Параметр проекции на ребро [0,1]
+            t = (to_p_x * edge_x + to_p_y * edge_y) / edge_length_sq
+            t = min(max(t, 0.0), 1.0)
             
-            # Если частица вышла за границу (учитывая радиус)
-            if distance < radius:
-                # Проекция точки на ребро
-                t = (to_particle_x * edge_x + to_particle_y * edge_y) / edge_length
-                t = min(max(t, 0.0), 1.0)
+            # Ближайшая точка на ребре
+            closest_x = x1 + t * edge_x
+            closest_y = y1 + t * edge_y
+            
+            # Расстояние до ребра
+            dx = p[0] - closest_x
+            dy = p[1] - closest_y
+            dist = math.sqrt(dx * dx + dy * dy)
+            
+            if dist < min_dist:
+                min_dist = dist
+                closest_point[0] = closest_x
+                closest_point[1] = closest_y
                 
-                # Ближайшая точка на ребре
-                closest_x = x1 + t * (x2 - x1)
-                closest_y = y1 + t * (y2 - y1)
-                
-                # Вектор от ближайшей точки к частице
-                dx = p[0] - closest_x
-                dy = p[1] - closest_y
-                dist_to_edge = math.sqrt(dx * dx + dy * dy)
-                
-                if dist_to_edge < 1e-12:
-                    # Если частица точно на ребре, используем вычисленную нормаль
-                    norm_length = math.sqrt(normal_x * normal_x + normal_y * normal_y)
-                    if norm_length > 1e-12:
-                        normal_x /= norm_length
-                        normal_y /= norm_length
+                # Нормаль от ребра к частице
+                if dist > 1e-12:
+                    normal[0] = dx / dist
+                    normal[1] = dy / dist
                 else:
-                    # Нормаль от ребра к частице
-                    normal_x = dx / dist_to_edge
-                    normal_y = dy / dist_to_edge
-                
-                # Отражение скорости
-                dot = v[0] * normal_x + v[1] * normal_y
-                if dot < 0:  # Только если движется наружу
-                    v[0] -= 2.0 * dot * normal_x
-                    v[1] -= 2.0 * dot * normal_y
-                
-                # Сдвигаем частицу внутрь
-                overlap = radius - distance
-                p[0] += overlap * normal_x
-                p[1] += overlap * normal_y
+                    # Если частица точно на ребре, используем перпендикуляр к ребру
+                    normal[0] = -edge_y / math.sqrt(edge_length_sq)
+                    normal[1] = edge_x / math.sqrt(edge_length_sq)
+        
+        # Если частица слишком близко к границе - отражаем
+        if min_dist < radius:
+            # Отражение скорости
+            dot = v[0] * normal[0] + v[1] * normal[1]
+            if dot < 0:  # Только если движется наружу
+                v[0] -= 2.0 * dot * normal[0]
+                v[1] -= 2.0 * dot * normal[1]
+            
+            # Сдвигаем частицу внутрь
+            overlap = radius - min_dist
+            p[0] += overlap * normal[0]
+            p[1] += overlap * normal[1]
         
         pos[i] = p
         vel[i] = v
 
-
 @dataclass
 class System:
     vessel: Vessel
-    N: int = 50
+    N: int = 100
     radius: float = 0.015
     temp: float = 0.5
     dt: float = 0.002  # fixed integration timestep (user cannot change)
@@ -393,44 +399,49 @@ class System:
 
     def integrate(self):
         if self.pos is None:
-            print("Integrate: pos is None")
             return
-
+        
+        # БОЛЕЕ СТРОГОЕ ограничение скорости
+        max_speed = 2.0  # уменьшено с 5.0
+        speeds = np.linalg.norm(self.vel, axis=1)
+        too_fast = speeds > max_speed
+        if np.any(too_fast):
+            scale_factors = max_speed / speeds[too_fast]
+            self.vel[too_fast] *= scale_factors[:, np.newaxis]
+        
+        # Остальная часть метода без изменений...
         N = self.n()
         F_new = self.compute_forces()
-
-        # 1. Вычисляем промежуточную скорость и позицию
+        
+        # Дополнительная проверка на слишком большие силы
+        force_magnitudes = np.linalg.norm(F_new, axis=1)
+        max_force = 100.0
+        if np.any(force_magnitudes > max_force):
+            scale = max_force / np.max(force_magnitudes)
+            F_new *= scale
+        
         vel_half = self.vel + 0.5 * (F_new + self.F_old) / self.mass * self.dt
         pos_new = self.pos + vel_half * self.dt
-
-        # 2. Обрабатываем столкновения со стенками
+        
+        # Обработка столкновений со стенками
         if self.vessel.kind in ("rect", "Прямоугольник"):
             xmin, ymin, xmax, ymax = self.vessel.rect
-            collisions = reflect_rectangular_numba(pos_new, vel_half, self.radius, xmin, ymin, xmax, ymax)
+            reflect_rectangular_numba(pos_new, vel_half, self.radius, xmin, ymin, xmax, ymax)
         elif self.vessel.kind in ("circle", "Круг"):
             cx, cy, R = self.vessel.circle
-            collisions = reflect_circular_numba(pos_new, vel_half, self.radius, cx, cy, R)
+            reflect_circular_numba(pos_new, vel_half, self.radius, cx, cy, R)
         elif self.vessel.kind in ("poly", "Многоугольник") and self.vessel.poly is not None:
-            collisions = reflect_polygonal_numba(pos_new, vel_half, self.radius, self.vessel.poly)
-        else:
-            xmin, ymin, xmax, ymax = self.vessel.bounds()
-            collisions = reflect_rectangular_numba(pos_new, vel_half, self.radius, xmin, ymin, xmax, ymax)
-
-        # 3. Если есть столкновения, пересчитываем позицию
-        # if collisions > 0:
-            # Пересчитываем позицию с учетом отраженной скорости
-            # pos_new = self.pos + vel_half * self.dt
-
-        # 4. Демпфирование
-        if self.friction_gamma > 0:
-            damp = math.exp(-self.friction_gamma * self.dt)
-            vel_new = vel_half * damp
-        else:
-            vel_new = vel_half
-
+            reflect_polygonal_numba(pos_new, vel_half, self.radius, self.vessel.poly)
+        
+        # Обновление позиций и скоростей
         self.F_old[:] = F_new
         self.pos[:] = pos_new
-        self.vel[:] = vel_new
+        self.vel[:] = vel_half
+        
+        # Демпфирование
+        if self.friction_gamma > 0:
+            damp = math.exp(-self.friction_gamma * self.dt)
+            self.vel *= damp
 
     def pairwise_distances_fast(self, max_pairs=10000):
         if self.pos is None or self.n() < 2:
@@ -732,7 +743,7 @@ class SimulationWidget(QtWidgets.QWidget):
         self.draw_mode = False
         self.poly_points = []
 
-    def _init_simulation(self, N=50, radius=0.02, temp=0.3, dt=0.002,  # temp = 0.3 вместо 0.1
+    def _init_simulation(self, N=100, radius=0.02, temp=0.3, dt=0.002,  # temp = 0.3 вместо 0.1
                      vessel_kind="Прямоугольник", poly=None,
                      potential_params=None, mass=1.0):
 
