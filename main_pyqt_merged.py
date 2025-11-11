@@ -1,5 +1,5 @@
 # main_pyqt.py
-# GUI с переключателем языка (RU/EN) по кнопке-флагу в левом нижнем углу главного меню.
+# GUI с переключателем языка (RU/EN/CN) по кнопке-флагу в левом нижнем углу главного меню.
 # Требуются: PyQt6, numpy, matplotlib, numba, Pillow (PIL). Картинки флагов в images/.
 
 import sys
@@ -26,6 +26,7 @@ from numba import njit, prange
 class Lang(str, Enum):
     RU = "ru"
     EN = "en"
+    CN = "cn"  # ← добавляем китайский
 
 
 STRINGS = {
@@ -170,6 +171,77 @@ STRINGS = {
         "authors.name1": "Stanislav Enyagin",
         "authors.name2": "Elizaveta Kozhemyakova",
         "authors.back": "Back",
+    },
+    "cn": {
+        "app.title": "各种形状容器中粒子间距离分布",
+        "menu.title": "粒子距离分布",
+        "menu.subtitle": "在各种形状容器中",
+        "menu.start": "开始模拟",
+        "menu.authors": "关于作者",
+        "menu.exit": "退出",
+
+        "vessel.rect": "矩形",
+        "vessel.circle": "圆形",
+        "vessel.poly": "多边形",
+
+        "sim.settings": "模拟设置",
+        "sim.N": "N",
+        "sim.N.unit": "个",
+        "sim.N.help": "粒子数量",
+        "sim.R": "R",
+        "sim.R.unit": "单位",
+        "sim.R.help": "粒子半径",
+        "sim.T": "T",
+        "sim.T.unit": "kT",
+        "sim.T.help": "温度",
+        "sim.m": "m",
+        "sim.m.unit": "单位",
+        "sim.m.help": "粒子质量",
+        "sim.collisions": "粒子碰撞",
+        "sim.pot": "势能",
+        "sim.pot.help": "对势类型",
+        "sim.eps": "ε",
+        "sim.eps.unit": "千焦/摩尔",
+        "sim.eps.help": "能量尺度",
+        "sim.sigma": "σ",
+        "sim.sigma.unit": "单位",
+        "sim.sigma.help": "LJ特征距离",
+        "sim.De": "De",
+        "sim.De.unit": "千焦/摩尔",
+        "sim.De.help": "Morse势阱深度",
+        "sim.a": "a",
+        "sim.a.unit": "1/单位",
+        "sim.a.help": "Morse刚度",
+        "sim.r0": "r₀",
+        "sim.r0.unit": "单位",
+        "sim.r0.help": "平衡距离 (Morse)",
+        "sim.vessel": "容器",
+        "sim.vessel.help": "容器形状",
+        "sim.interact": "相互作用",
+        "sim.interact.unit": "第 次迭代",
+        "sim.bins": "分箱",
+        "sim.bins.help": "直方图的分箱数量",
+
+        "sim.btn.draw": "绘制多边形",
+        "sim.btn.clear": "清除多边形",
+        "sim.btn.pause": "暂停",
+        "sim.btn.start": "开始",
+        "sim.btn.apply": "应用",
+        "sim.btn.back": "返回",
+        "sim.btn.collapse": "折叠",
+        "sim.btn.expand": "展开",
+        "sim.top.settings": "≡ 设置",
+        "sim.anim.title": "容器 - 粒子区域",
+
+        "sim.hist.x": "X分布",
+        "sim.hist.y": "Y分布",
+        "sim.hist.r": "距离分布",
+
+        "menu.authors": "关于作者",
+        "authors.title": "开发团队",
+        "authors.name1": "叶尼亚金·斯坦尼斯拉夫",
+        "authors.name2": "科热米亚科娃·伊丽莎白",
+        "authors.back": "返回",
     },
 }
 
@@ -569,8 +641,15 @@ class System:
     def compute_forces(self):
         if self.pos is None:
             return np.zeros((0, 2))
-        kind_code = {"Нет": 0, "Отталкивание": 1, "Притяжение": 2, "Леннард-Джонс": 3, "Морзе": 4}.get(self.params.kind,
-                                                                                                       0)
+        # Обновляем mapping для поддержки китайских названий
+        kind_mapping = {
+            "Нет": 0, "None": 0, "无": 0,
+            "Отталкивание": 1, "Repulsion": 1, "排斥": 1,
+            "Притяжение": 2, "Attraction": 2, "吸引": 2,
+            "Леннард-Джонс": 3, "Lennard-Jones": 3, "伦纳德-琼斯": 3,
+            "Морзе": 4, "Morse": 4, "莫尔斯": 4
+        }
+        kind_code = kind_mapping.get(self.params.kind, 0)
         return compute_forces_numba(self.pos, kind_code, self.params.k, self.params.epsilon,
                                     self.params.sigma, self.params.De, self.params.a, self.params.r0,
                                     self.params.rcut_lr, self.mass)
@@ -756,7 +835,18 @@ class MainMenuWidget(QtWidgets.QWidget):
         self.lbl_subtitle.setText(s["menu.subtitle"])
         self.btn_start.setText(s["menu.start"])
         self.btn_exit.setText(s["menu.exit"])
-        icon = self._load_img_icon("rus.png" if lang == Lang.RU else "eng.png")
+
+        # Обновляем иконку флага для всех языков
+        if lang == Lang.RU:
+            icon_file = "rus.png"
+        elif lang == Lang.EN:
+            icon_file = "eng.png"
+        elif lang == Lang.CN:
+            icon_file = "china.png"
+        else:
+            icon_file = "rus.png"  # fallback
+
+        icon = self._load_img_icon(icon_file)
         if icon:
             self.btn_flag.setIcon(icon)
             self.btn_flag.setIconSize(QtCore.QSize(28, 20))
@@ -767,6 +857,12 @@ class MainMenuWidget(QtWidgets.QWidget):
 class SimulationWidget(QtWidgets.QWidget):
     def __init__(self, parent, back_cb, get_lang_cb):
         super().__init__(parent)
+
+        self.accumulated_x = np.array([])
+        self.accumulated_y = np.array([])
+        self.accumulated_distances = np.array([])
+        self.max_accumulated_points = 100000  # Максимальное количество точек для предотвращения переполнения
+
         self.back_cb = back_cb
         self.get_lang_cb = get_lang_cb
         self.bins_count = 36  # Значение по умолчанию
@@ -1009,29 +1105,53 @@ class SimulationWidget(QtWidgets.QWidget):
                 self._last_canvas_update = current_time
 
     def _update_histograms(self):
+        # Накопление данных о текущих позициях
+        current_x = self.system.pos[:, 0]
+        current_y = self.system.pos[:, 1]
+        current_dists = self.system.pairwise_distances_fast(max_pairs=5000)
+
+        # Добавляем текущие данные к накопленным
+        self.accumulated_x = np.concatenate([self.accumulated_x, current_x])
+        self.accumulated_y = np.concatenate([self.accumulated_y, current_y])
+        if current_dists.size > 0:
+            self.accumulated_distances = np.concatenate([self.accumulated_distances, current_dists])
+
+        # Ограничиваем размер массивов для предотвращения переполнения памяти
+        if len(self.accumulated_x) > self.max_accumulated_points:
+            self.accumulated_x = self.accumulated_x[-self.max_accumulated_points:]
+        if len(self.accumulated_y) > self.max_accumulated_points:
+            self.accumulated_y = self.accumulated_y[-self.max_accumulated_points:]
+        if len(self.accumulated_distances) > self.max_accumulated_points:
+            self.accumulated_distances = self.accumulated_distances[-self.max_accumulated_points:]
+
+        # Очищаем графики
         for ax in (self.ax_histx, self.ax_histy, self.ax_histd):
-            ax.cla();
+            ax.cla()
             ax.set_facecolor("#f9f9f9")
             ax.grid(True, linestyle='--', alpha=0.3)
             ax.tick_params(labelsize=9)
+
         lang = self.get_lang_cb()
         s = STRINGS[lang.value]
-        x = self.system.pos[:, 0]
-        self.ax_histx.hist(x, bins=self.bins_count, density=True, color="#8bb7d7", alpha=0.8)
+
+        # Строим гистограммы из накопленных данных
+        if len(self.accumulated_x) > 0:
+            self.ax_histx.hist(self.accumulated_x, bins=self.bins_count, density=True, color="#8bb7d7", alpha=0.8)
         self.ax_histx.set_ylabel("p(x)", labelpad=5)
         self.ax_histx.set_title(s["sim.hist.x"], fontsize=10, fontweight='bold')
 
-        y = self.system.pos[:, 1]
-        self.ax_histy.hist(y, bins=self.bins_count, density=True, color="#f9ad6c", alpha=0.8)
+        if len(self.accumulated_y) > 0:
+            self.ax_histy.hist(self.accumulated_y, bins=self.bins_count, density=True, color="#f9ad6c", alpha=0.8)
         self.ax_histy.set_ylabel("p(y)", labelpad=5)
         self.ax_histy.set_title(s["sim.hist.y"], fontsize=10, fontweight='bold')
 
-        dists = self.system.pairwise_distances_fast(max_pairs=5000)
-        if dists.size > 0:
-            self.ax_histd.hist(dists, bins=self.bins_count, density=True, color="#8dd38d", alpha=0.85)
+        if len(self.accumulated_distances) > 0:
+            self.ax_histd.hist(self.accumulated_distances, bins=self.bins_count, density=True, color="#8dd38d",
+                               alpha=0.85)
         self.ax_histd.set_ylabel("p(r)", labelpad=5)
         self.ax_histd.set_xlabel("r")
         self.ax_histd.set_title(s["sim.hist.r"], fontsize=10, fontweight='bold')
+
         self.canvas_hist.draw_idle()
 
     def _apply_settings(self):
@@ -1052,11 +1172,17 @@ class SimulationWidget(QtWidgets.QWidget):
         )
         vessel_kind = str(self.vessel_box.currentText())
         poly = self.system.vessel.poly if vessel_kind in ("poly", "Многоугольник") else None
+
+        # Сбрасываем накопленные данные при изменении параметров
+        self.accumulated_x = np.array([])
+        self.accumulated_y = np.array([])
+        self.accumulated_distances = np.array([])
+
         self._init_simulation(N=N, radius=radius, temp=temp, dt=dt, vessel_kind=vessel_kind, poly=poly,
                               potential_params=pot_params, mass=mass, enable_collisions=enable_collisions,
                               interaction_step=interaction_step)
         self._update_histograms()
-        self.update_language(self.get_lang_cb())  # чтобы тексты не потерялись при пересоздании
+        self.update_language(self.get_lang_cb())
 
     def _toggle_run(self):
         lang = self.get_lang_cb()
@@ -1198,19 +1324,15 @@ class SimulationWidget(QtWidgets.QWidget):
         if lang == Lang.RU:
             self.pot_box.clear()
             self.pot_box.addItems(["Нет", "Отталкивание", "Притяжение", "Леннард-Джонс", "Морзе"])
-        else:
+        elif lang == Lang.EN:
             self.pot_box.clear()
             self.pot_box.addItems(["None", "Repulsion", "Attraction", "Lennard-Jones", "Morse"])
+        elif lang == Lang.CN:
+            self.pot_box.clear()
+            self.pot_box.addItems(["无", "排斥", "吸引", "伦纳德-琼斯", "莫尔斯"])
         self.pot_box.setCurrentIndex(current_index)
 
-        current_pot_index = self.pot_box.currentIndex()
-        if lang == Lang.RU:
-            self.pot_box.clear()
-            self.pot_box.addItems(["Нет", "Отталкивание", "Притяжение", "Леннард-Джонс", "Морзе"])
-        else:
-            self.pot_box.clear()
-            self.pot_box.addItems(["None", "Repulsion", "Attraction", "Lennard-Jones", "Morse"])
-        self.pot_box.setCurrentIndex(current_pot_index)
+        # Удаляем дублирующий блок кода для потенциалов
 
         # Обновляем названия сосудов
         current_vessel_index = self.vessel_box.currentIndex()
@@ -1344,7 +1466,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.apply_language()
 
     def toggle_language(self):
-        self.lang = Lang.EN if self.lang == Lang.RU else Lang.RU
+        # Циклическое переключение: RU → EN → CN → RU → ...
+        if self.lang == Lang.RU:
+            self.lang = Lang.EN
+        elif self.lang == Lang.EN:
+            self.lang = Lang.CN
+        else:  # CN
+            self.lang = Lang.RU
         self.apply_language()
 
     def apply_language(self):
@@ -1355,7 +1483,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if hasattr(self.sim, "update_language"):
             self.sim.update_language(self.lang)
         if hasattr(self.authors, "update_language"):
-            self.authors.update_language(self.lang)  # ← добавили обновление авторов
+            self.authors.update_language(self.lang)
 
 
 def main():
