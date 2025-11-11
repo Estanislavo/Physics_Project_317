@@ -37,6 +37,10 @@ STRINGS = {
         "menu.authors": "Об авторах",
         "menu.exit": "Выход",
 
+        "vessel.rect": "Прямоугольник",
+        "vessel.circle": "Круг",
+        "vessel.poly": "Многоугольник",
+
         "sim.settings": "Настройки симуляции",
         "sim.N": "N",
         "sim.N.unit": "шт",
@@ -87,6 +91,12 @@ STRINGS = {
         "sim.hist.x": "Распределение X",
         "sim.hist.y": "Распределение Y",
         "sim.hist.r": "Распределение расстояний",
+
+        "menu.authors": "Об авторах",
+        "authors.title": "Команда разработчиков",
+        "authors.name1": "Енягин Станислав",
+        "authors.name2": "Кожемякова Елизавета",
+        "authors.back": "Вернуться",
     },
     "en": {
         "app.title": "Distribution of Distances Between Particles in Vessels of Various Shapes",
@@ -95,6 +105,10 @@ STRINGS = {
         "menu.start": "Start Simulation",
         "menu.authors": "Authors",
         "menu.exit": "Exit",
+
+        "vessel.rect": "Rectangle",
+        "vessel.circle": "Circle",
+        "vessel.poly": "Polygon",
 
         "sim.settings": "Simulation settings",
         "sim.N": "N",
@@ -146,6 +160,12 @@ STRINGS = {
         "sim.hist.x": "Distribution of X",
         "sim.hist.y": "Distribution of Y",
         "sim.hist.r": "Distribution of pair distances",
+
+        "menu.authors": "Authors",
+        "authors.title": "Development Team",
+        "authors.name1": "Stanislav Enyagin",
+        "authors.name2": "Elizaveta Kozhemyakova",
+        "authors.back": "Back",
     },
 }
 
@@ -810,8 +830,11 @@ class SimulationWidget(QtWidgets.QWidget):
         self.check_collisions = WinCheckBox()
         sp_layout.addWidget(self.check_collisions)
 
+        # self.pot_box = QtWidgets.QComboBox()
+        # self.pot_box.addItems(["Нет", "Отталкивание", "Притяжение", "Леннард-Джонс", "Морзе"])
+
         self.pot_box = QtWidgets.QComboBox()
-        self.pot_box.addItems(["Нет", "Отталкивание", "Притяжение", "Леннард-Джонс", "Морзе"])
+
         add_row("pot", self.pot_box, "", "sim.pot.help")
 
         self.edit_eps = QtWidgets.QDoubleSpinBox();
@@ -1156,11 +1179,41 @@ class SimulationWidget(QtWidgets.QWidget):
         self.ax_anim.set_title(s["sim.anim.title"])
         self.canvas_anim.draw_idle()
 
+        # Обновляем названия потенциалов
+        current_index = self.pot_box.currentIndex()
+        if lang == Lang.RU:
+            self.pot_box.clear()
+            self.pot_box.addItems(["Нет", "Отталкивание", "Притяжение", "Леннард-Джонс", "Морзе"])
+        else:
+            self.pot_box.clear()
+            self.pot_box.addItems(["None", "Repulsion", "Attraction", "Lennard-Jones", "Morse"])
+        self.pot_box.setCurrentIndex(current_index)
+
+        current_pot_index = self.pot_box.currentIndex()
+        if lang == Lang.RU:
+            self.pot_box.clear()
+            self.pot_box.addItems(["Нет", "Отталкивание", "Притяжение", "Леннард-Джонс", "Морзе"])
+        else:
+            self.pot_box.clear()
+            self.pot_box.addItems(["None", "Repulsion", "Attraction", "Lennard-Jones", "Morse"])
+        self.pot_box.setCurrentIndex(current_pot_index)
+
+        # Обновляем названия сосудов
+        current_vessel_index = self.vessel_box.currentIndex()
+        self.vessel_box.clear()
+        self.vessel_box.addItems([
+            s["vessel.rect"],
+            s["vessel.circle"],
+            s["vessel.poly"]
+        ])
+        self.vessel_box.setCurrentIndex(current_vessel_index)
+
 
 class AuthorsWidget(QtWidgets.QWidget):
-    def __init__(self, parent, back_cb):
+    def __init__(self, parent, back_cb, get_lang_cb):
         super().__init__(parent)
         self.back_cb = back_cb
+        self.get_lang_cb = get_lang_cb
         self._build_ui()
 
     def _load_sticker(self, fname, size=420):
@@ -1178,9 +1231,12 @@ class AuthorsWidget(QtWidgets.QWidget):
 
     def _build_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
-        title = QtWidgets.QLabel("Команда разработчиков")
-        title.setStyleSheet("font-size:24pt; font-weight:700;")
-        layout.addWidget(title, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
+
+        # Используем локализацию
+        self.title_label = QtWidgets.QLabel()
+        self.title_label.setStyleSheet("font-size:24pt; font-weight:700;")
+        layout.addWidget(self.title_label, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
+
         cards = QtWidgets.QHBoxLayout()
         layout.addLayout(cards)
 
@@ -1190,9 +1246,10 @@ class AuthorsWidget(QtWidgets.QWidget):
             lbl = QtWidgets.QLabel()
             lbl.setPixmap(pix)
             left.addWidget(lbl, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
-        name = QtWidgets.QLabel("Енягин Станислав")
-        name.setStyleSheet("font-size:16pt; font-weight:600;")
-        left.addWidget(name, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
+
+        self.name1_label = QtWidgets.QLabel()
+        self.name1_label.setStyleSheet("font-size:16pt; font-weight:600;")
+        left.addWidget(self.name1_label, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
         cards.addLayout(left)
 
         right = QtWidgets.QVBoxLayout()
@@ -1201,18 +1258,30 @@ class AuthorsWidget(QtWidgets.QWidget):
             lbl2 = QtWidgets.QLabel()
             lbl2.setPixmap(pix2)
             right.addWidget(lbl2, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
-        name2 = QtWidgets.QLabel("Кожемякова Елизавета")
-        name2.setStyleSheet("font-size:16pt; font-weight:600;")
-        right.addWidget(name2, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
+
+        self.name2_label = QtWidgets.QLabel()
+        self.name2_label.setStyleSheet("font-size:16pt; font-weight:600;")
+        right.addWidget(self.name2_label, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
         cards.addLayout(right)
 
         layout.addStretch(1)
-        back = QtWidgets.QPushButton("Вернуться")
-        back.setFixedSize(200, 48)
-        back.setStyleSheet("background:#313132;color:white;font-weight:600;border-radius:6px;")
-        back.clicked.connect(self.back_cb)
-        layout.addWidget(back, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
+
+        self.back_btn = QtWidgets.QPushButton()
+        self.back_btn.setFixedSize(200, 48)
+        self.back_btn.setStyleSheet("background:#313132;color:white;font-weight:600;border-radius:6px;")
+        self.back_btn.clicked.connect(self.back_cb)
+        layout.addWidget(self.back_btn, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
         layout.addSpacing(20)
+
+        # Устанавливаем текст при инициализации
+        self.update_language(self.get_lang_cb())
+
+    def update_language(self, lang: Lang):
+        s = STRINGS[lang.value]
+        self.title_label.setText(s["authors.title"])
+        self.name1_label.setText(s["authors.name1"])
+        self.name2_label.setText(s["authors.name2"])
+        self.back_btn.setText(s["authors.back"])
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -1237,7 +1306,7 @@ class MainWindow(QtWidgets.QMainWindow):
             authors_cb=self.show_authors
         )
         self.sim = SimulationWidget(self, back_cb=self.show_menu, get_lang_cb=lambda: self.lang)
-        self.authors = AuthorsWidget(self, back_cb=self.show_menu)
+        self.authors = AuthorsWidget(self, back_cb=self.show_menu, get_lang_cb=lambda: self.lang)
 
         central.addWidget(self.menu)
         central.addWidget(self.sim)
@@ -1267,8 +1336,12 @@ class MainWindow(QtWidgets.QMainWindow):
     def apply_language(self):
         s = STRINGS[self.lang.value]
         self.setWindowTitle(s["app.title"])
-        if hasattr(self.menu, "update_language"): self.menu.update_language(self.lang)
-        if hasattr(self.sim, "update_language"): self.sim.update_language(self.lang)
+        if hasattr(self.menu, "update_language"):
+            self.menu.update_language(self.lang)
+        if hasattr(self.sim, "update_language"):
+            self.sim.update_language(self.lang)
+        if hasattr(self.authors, "update_language"):
+            self.authors.update_language(self.lang)  # ← добавили обновление авторов
 
 
 def main():
