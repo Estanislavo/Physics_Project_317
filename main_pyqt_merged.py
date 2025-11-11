@@ -14,6 +14,7 @@ from PIL import Image, ImageQt
 
 from PyQt6 import QtWidgets, QtCore, QtGui
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 from matplotlib import patches
@@ -755,6 +756,8 @@ class MainMenuWidget(QtWidgets.QWidget):
         pix = self._load_logo_pixmap("cmc_logo.png")
         if pix:
             left_logo.setPixmap(pix)
+            left_logo.setFixedSize(180, 180)  # ФИКСИРУЕМ РАЗМЕР
+            left_logo.setScaledContents(True)
         left.addWidget(
             left_logo,
             alignment=QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
@@ -763,10 +766,9 @@ class MainMenuWidget(QtWidgets.QWidget):
 
         # Кнопка флага (левый нижний угол)
         self.btn_flag = QtWidgets.QPushButton()
-        self.btn_flag.setFixedSize(44, 32)
+        self.btn_flag.setFixedSize(44, 32)  # ФИКСИРУЕМ РАЗМЕР
         self.btn_flag.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
         self.btn_flag.setStyleSheet("border:1px solid #ccc; border-radius:6px; background:#fff;")
-        # Если где-то есть иконки флагов, update_language выставит их; иначе оставить как есть
         self.btn_flag.clicked.connect(self.lang_toggle_cb)
         left.addWidget(
             self.btn_flag,
@@ -774,29 +776,38 @@ class MainMenuWidget(QtWidgets.QWidget):
         )
 
         # --- Правый столбец: логотип (если есть) ---
+
         right_logo = QtWidgets.QLabel()
         pix2 = self._load_logo_pixmap("fiz_logo.png") or self._load_logo_pixmap("fiz_logo.jpg")
         if pix2:
             right_logo.setPixmap(pix2)
+            right_logo.setFixedSize(180, 180)  # ФИКСИРУЕМ РАЗМЕР
+            right_logo.setScaledContents(True)
         right.addWidget(
             right_logo,
-            alignment=QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+            alignment=QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignTop
         )
+
+        right.addStretch(1)  # ← ДОБАВЬ ЭТУ СТРОЧКУ
 
         # --- Центр: заголовки и кнопки ---
         self.lbl_title = QtWidgets.QLabel()
         self.lbl_title.setStyleSheet("font-size:30pt; font-weight:600;")
+        self.lbl_title.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)  # ВЫРАВНИВАНИЕ
+        self.lbl_title.setWordWrap(True)  # ПЕРЕНАС СЛОВ
 
         self.lbl_subtitle = QtWidgets.QLabel()
         self.lbl_subtitle.setStyleSheet("font-size:20pt; color:#444")
+        self.lbl_subtitle.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)  # ВЫРАВНИВАНИЕ
+        self.lbl_subtitle.setWordWrap(True)  # ПЕРЕНАС СЛОВ
 
         center.addStretch(1)
-        center.addWidget(self.lbl_title, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
-        center.addWidget(self.lbl_subtitle, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        center.addWidget(self.lbl_title)
+        center.addWidget(self.lbl_subtitle)
 
         # Кнопка Старт
         self.btn_start = QtWidgets.QPushButton()
-        self.btn_start.setFixedSize(240, 50)
+        self.btn_start.setFixedSize(240, 50)  # ФИКСИРУЕМ РАЗМЕР
         self.btn_start.setStyleSheet(
             "background:#3271a8; color:white; font-weight:600; font-size:12pt; border-radius:6px; margin-top:10px;"
         )
@@ -804,10 +815,9 @@ class MainMenuWidget(QtWidgets.QWidget):
         center.addWidget(self.btn_start, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
 
         # Кнопка Об авторах (опционально)
-        # Появится только если в __init__ сохранён self.authors_cb (или атрибут существует и не None)
         if hasattr(self, "authors_cb") and self.authors_cb:
             self.btn_authors = QtWidgets.QPushButton()
-            self.btn_authors.setFixedSize(240, 50)
+            self.btn_authors.setFixedSize(240, 50)  # ФИКСИРУЕМ РАЗМЕР
             self.btn_authors.setStyleSheet(
                 "background:#a6b2bd; color:white; font-weight:600; font-size:12pt; border-radius:6px; margin-top:10px;"
             )
@@ -816,7 +826,7 @@ class MainMenuWidget(QtWidgets.QWidget):
 
         # Кнопка Выход
         self.btn_exit = QtWidgets.QPushButton()
-        self.btn_exit.setFixedSize(240, 50)
+        self.btn_exit.setFixedSize(240, 50)  # ФИКСИРУЕМ РАЗМЕР
         self.btn_exit.setStyleSheet(
             "background:#f78765; color:white; font-weight:600; font-size:12pt; border-radius:6px; margin-top:10px;"
         )
@@ -826,7 +836,6 @@ class MainMenuWidget(QtWidgets.QWidget):
         center.addStretch(2)
 
         # Установим надписи и иконку флага согласно текущему языку
-        # (ожидается, что update_language(lang) сама проставит тексты lbl_title/lbl_subtitle/кнопок и картинку флага)
         self.update_language(self.get_lang_cb())
 
     def update_language(self, lang: Lang):
@@ -874,7 +883,7 @@ class SimulationWidget(QtWidgets.QWidget):
     def _build_ui(self):
         main_l = QtWidgets.QHBoxLayout(self)
         self.settings_panel = QtWidgets.QWidget()
-        self.settings_panel.setFixedWidth(300)
+        self.settings_panel.setFixedWidth(300)  # ФИКСИРУЕМ ШИРИНУ
         self.settings_panel.setStyleSheet("background:#f7f7f8;")
         sp_layout = QtWidgets.QVBoxLayout(self.settings_panel)
         sp_layout.setContentsMargins(12, 12, 12, 12)
@@ -888,7 +897,7 @@ class SimulationWidget(QtWidgets.QWidget):
             row = QtWidgets.QHBoxLayout()
             lbl = QtWidgets.QLabel()  # текст поставим в update_language
             lbl.setObjectName(f"lbl_{key_label}")
-            lbl.setFixedWidth(90)
+            lbl.setFixedWidth(90)  # ФИКСИРУЕМ ШИРИНУ
             if key_help:
                 h = QtWidgets.QLabel()
                 h.setObjectName(f"help_{key_label}")
@@ -900,7 +909,7 @@ class SimulationWidget(QtWidgets.QWidget):
             if key_unit:
                 u = QtWidgets.QLabel()
                 u.setObjectName(f"unit_{key_label}")
-                u.setFixedWidth(80)
+                u.setFixedWidth(80)  # ФИКСИРУЕМ ШИРИНУ
                 row.addWidget(u)
             sp_layout.addLayout(row)
 
@@ -978,27 +987,33 @@ class SimulationWidget(QtWidgets.QWidget):
         sp_layout.addSpacing(8)
         self.btn_draw = QtWidgets.QPushButton()
         self.btn_draw.clicked.connect(self._enter_draw_mode)
+        self.btn_draw.setFixedHeight(35)  # ФИКСИРУЕМ ВЫСОТУ
         sp_layout.addWidget(self.btn_draw)
 
         self.btn_clear = QtWidgets.QPushButton()
         self.btn_clear.clicked.connect(self._clear_poly)
+        self.btn_clear.setFixedHeight(35)  # ФИКСИРУЕМ ВЫСОТУ
         sp_layout.addWidget(self.btn_clear)
 
         self.btn_run = QtWidgets.QPushButton()
         self.btn_run.clicked.connect(self._toggle_run)
+        self.btn_run.setFixedHeight(35)  # ФИКСИРУЕМ ВЫСОТУ
         sp_layout.addWidget(self.btn_run)
 
         self.btn_apply = QtWidgets.QPushButton()
         self.btn_apply.clicked.connect(self._apply_settings)
+        self.btn_apply.setFixedHeight(35)  # ФИКСИРУЕМ ВЫСОТУ
         sp_layout.addWidget(self.btn_apply)
 
         self.btn_back = QtWidgets.QPushButton()
         self.btn_back.clicked.connect(self.back_cb)
+        self.btn_back.setFixedHeight(35)  # ФИКСИРУЕМ ВЫСОТУ
         sp_layout.addStretch(1)
         sp_layout.addWidget(self.btn_back)
 
         self.btn_collapse = QtWidgets.QPushButton()
         self.btn_collapse.clicked.connect(self._toggle_settings)
+        self.btn_collapse.setFixedHeight(35)  # ФИКСИРУЕМ ВЫСОТУ
         sp_layout.addWidget(self.btn_collapse)
 
         canvas_container = QtWidgets.QHBoxLayout()
@@ -1013,7 +1028,7 @@ class SimulationWidget(QtWidgets.QWidget):
 
         top_bar = QtWidgets.QHBoxLayout()
         self.btn_toggle_settings_small = QtWidgets.QPushButton()
-        self.btn_toggle_settings_small.setFixedSize(110, 28)
+        self.btn_toggle_settings_small.setFixedSize(110, 28)  # ФИКСИРУЕМ РАЗМЕР
         self.btn_toggle_settings_small.clicked.connect(self._toggle_settings)
         top_bar.addWidget(self.btn_toggle_settings_small, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
         top_bar.addStretch(1)
@@ -1023,6 +1038,7 @@ class SimulationWidget(QtWidgets.QWidget):
         self.ax_anim = self.fig_anim.add_subplot(111)
         self.ax_anim.set_aspect('equal')
         self.canvas_anim = FigureCanvas(self.fig_anim)
+        self.canvas_anim.setMinimumSize(600, 600)  # ФИКСИРУЕМ МИНИМАЛЬНЫЙ РАЗМЕР
         anim_container.addWidget(self.canvas_anim)
         self.canvas_anim.mpl_connect("button_press_event", self._on_mouse)
 
@@ -1032,6 +1048,7 @@ class SimulationWidget(QtWidgets.QWidget):
         self.ax_histx, self.ax_histy, self.ax_histd = axes
         self.fig_hist.tight_layout()
         self.canvas_hist = FigureCanvas(self.fig_hist)
+        self.canvas_hist.setMinimumSize(400, 600)  # ФИКСИРУЕМ МИНИМАЛЬНЫЙ РАЗМЕР
         hist_container.addWidget(self.canvas_hist)
 
         self.draw_mode = False
@@ -1332,8 +1349,6 @@ class SimulationWidget(QtWidgets.QWidget):
             self.pot_box.addItems(["无", "排斥", "吸引", "伦纳德-琼斯", "莫尔斯"])
         self.pot_box.setCurrentIndex(current_index)
 
-        # Удаляем дублирующий блок кода для потенциалов
-
         # Обновляем названия сосудов
         current_vessel_index = self.vessel_box.currentIndex()
         self.vessel_box.clear()
@@ -1371,7 +1386,8 @@ class AuthorsWidget(QtWidgets.QWidget):
         # Используем локализацию
         self.title_label = QtWidgets.QLabel()
         self.title_label.setStyleSheet("font-size:24pt; font-weight:700;")
-        layout.addWidget(self.title_label, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
+        self.title_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)  # ВЫРАВНИВАНИЕ
+        layout.addWidget(self.title_label)
 
         cards = QtWidgets.QHBoxLayout()
         layout.addLayout(cards)
@@ -1381,11 +1397,14 @@ class AuthorsWidget(QtWidgets.QWidget):
         if pix:
             lbl = QtWidgets.QLabel()
             lbl.setPixmap(pix)
+            lbl.setFixedSize(420, 420)  # ФИКСИРУЕМ РАЗМЕР
+            lbl.setScaledContents(True)
             left.addWidget(lbl, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
 
         self.name1_label = QtWidgets.QLabel()
         self.name1_label.setStyleSheet("font-size:16pt; font-weight:600;")
-        left.addWidget(self.name1_label, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
+        self.name1_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)  # ВЫРАВНИВАНИЕ
+        left.addWidget(self.name1_label)
         cards.addLayout(left)
 
         right = QtWidgets.QVBoxLayout()
@@ -1393,17 +1412,20 @@ class AuthorsWidget(QtWidgets.QWidget):
         if pix2:
             lbl2 = QtWidgets.QLabel()
             lbl2.setPixmap(pix2)
+            lbl2.setFixedSize(420, 420)  # ФИКСИРУЕМ РАЗМЕР
+            lbl2.setScaledContents(True)
             right.addWidget(lbl2, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
 
         self.name2_label = QtWidgets.QLabel()
         self.name2_label.setStyleSheet("font-size:16pt; font-weight:600;")
-        right.addWidget(self.name2_label, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
+        self.name2_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)  # ВЫРАВНИВАНИЕ
+        right.addWidget(self.name2_label)
         cards.addLayout(right)
 
         layout.addStretch(1)
 
         self.back_btn = QtWidgets.QPushButton()
-        self.back_btn.setFixedSize(200, 48)
+        self.back_btn.setFixedSize(200, 48)  # ФИКСИРУЕМ РАЗМЕР
         self.back_btn.setStyleSheet("background:#313132;color:white;font-weight:600;border-radius:6px;")
         self.back_btn.clicked.connect(self.back_cb)
         layout.addWidget(self.back_btn, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
@@ -1488,6 +1510,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
+
+    font_families = ["Microsoft YaHei", "Noto Sans CJK SC", "SimSun", "Arial"]
+    for font_family in font_families:
+        if QFont(font_family).exactMatch():
+            font = QFont(font_family, 9)
+            app.setFont(font)
+            break
+
+    plt.rcParams['font.family'] = ['Microsoft YaHei', 'SimHei', 'Noto Sans CJK SC', 'DejaVu Sans']
+    plt.rcParams['axes.unicode_minus'] = False  # Важно для правильного отображения минуса
+
     w = MainWindow()
     w.show()
     sys.exit(app.exec())
