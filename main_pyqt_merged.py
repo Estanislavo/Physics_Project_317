@@ -76,6 +76,8 @@ STRINGS = {
         "sim.vessel.help": "Форма сосуда",
         "sim.interact": "Интеракции",
         "sim.interact.unit": "к-я итерация",
+        "sim.bins": "Бины",
+        "sim.bins.help": "Количество бинов для гистограмм",
 
         "sim.btn.draw": "Рисовать полигон",
         "sim.btn.clear": "Очистить полигон",
@@ -145,6 +147,8 @@ STRINGS = {
         "sim.vessel.help": "Vessel shape",
         "sim.interact": "Interactions",
         "sim.interact.unit": "th iter",
+        "sim.bins": "Bins",
+        "sim.bins.help": "Number of bins for histograms",
 
         "sim.btn.draw": "Draw polygon",
         "sim.btn.clear": "Clear polygon",
@@ -765,6 +769,7 @@ class SimulationWidget(QtWidgets.QWidget):
         super().__init__(parent)
         self.back_cb = back_cb
         self.get_lang_cb = get_lang_cb
+        self.bins_count = 36  # Значение по умолчанию
         self._build_ui()
         self._init_simulation()
         self._start_timer()
@@ -830,11 +835,7 @@ class SimulationWidget(QtWidgets.QWidget):
         self.check_collisions = WinCheckBox()
         sp_layout.addWidget(self.check_collisions)
 
-        # self.pot_box = QtWidgets.QComboBox()
-        # self.pot_box.addItems(["Нет", "Отталкивание", "Притяжение", "Леннард-Джонс", "Морзе"])
-
         self.pot_box = QtWidgets.QComboBox()
-
         add_row("pot", self.pot_box, "", "sim.pot.help")
 
         self.edit_eps = QtWidgets.QDoubleSpinBox();
@@ -870,6 +871,13 @@ class SimulationWidget(QtWidgets.QWidget):
         self.spin_interact_step.setRange(1, 1000);
         self.spin_interact_step.setValue(10)
         add_row("interact", self.spin_interact_step, "sim.interact.unit", "")
+
+        # Добавляем спинбокс для количества бинов
+        self.spin_bins = QtWidgets.QSpinBox()
+        self.spin_bins.setRange(5, 100)
+        self.spin_bins.setValue(self.bins_count)
+        self.spin_bins.valueChanged.connect(self._on_bins_changed)
+        add_row("bins", self.spin_bins, "", "sim.bins.help")
 
         sp_layout.addSpacing(8)
         self.btn_draw = QtWidgets.QPushButton()
@@ -932,6 +940,10 @@ class SimulationWidget(QtWidgets.QWidget):
 
         self.draw_mode = False
         self.poly_points = []
+
+    def _on_bins_changed(self, value):
+        self.bins_count = value
+        self._update_histograms()
 
     def _init_simulation(self, N=10, radius=0.03, temp=0.3, dt=0.002,
                          vessel_kind="Прямоугольник", poly=None,
@@ -1005,18 +1017,18 @@ class SimulationWidget(QtWidgets.QWidget):
         lang = self.get_lang_cb()
         s = STRINGS[lang.value]
         x = self.system.pos[:, 0]
-        self.ax_histx.hist(x, bins=36, density=True, color="#8bb7d7", alpha=0.8)
+        self.ax_histx.hist(x, bins=self.bins_count, density=True, color="#8bb7d7", alpha=0.8)
         self.ax_histx.set_ylabel("p(x)", labelpad=5)
         self.ax_histx.set_title(s["sim.hist.x"], fontsize=10, fontweight='bold')
 
         y = self.system.pos[:, 1]
-        self.ax_histy.hist(y, bins=36, density=True, color="#f9ad6c", alpha=0.8)
+        self.ax_histy.hist(y, bins=self.bins_count, density=True, color="#f9ad6c", alpha=0.8)
         self.ax_histy.set_ylabel("p(y)", labelpad=5)
         self.ax_histy.set_title(s["sim.hist.y"], fontsize=10, fontweight='bold')
 
         dists = self.system.pairwise_distances_fast(max_pairs=5000)
         if dists.size > 0:
-            self.ax_histd.hist(dists, bins=36, density=True, color="#8dd38d", alpha=0.85)
+            self.ax_histd.hist(dists, bins=self.bins_count, density=True, color="#8dd38d", alpha=0.85)
         self.ax_histd.set_ylabel("p(r)", labelpad=5)
         self.ax_histd.set_xlabel("r")
         self.ax_histd.set_title(s["sim.hist.r"], fontsize=10, fontweight='bold')
@@ -1168,6 +1180,8 @@ class SimulationWidget(QtWidgets.QWidget):
         set_lbl("help_vessel", "sim.vessel.help")
         set_lbl("lbl_interact", "sim.interact");
         set_lbl("unit_interact", "sim.interact.unit")
+        set_lbl("lbl_bins", "sim.bins");
+        set_lbl("help_bins", "sim.bins.help")
 
         self.btn_draw.setText(s["sim.btn.draw"])
         self.btn_clear.setText(s["sim.btn.clear"])
