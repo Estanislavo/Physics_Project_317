@@ -1055,7 +1055,7 @@ class SimulationWidget(QtWidgets.QWidget):
         self.spin_interact_step.setRange(1, 1000)
         self.spin_interact_step.setValue(1)
         self.spin_interact_step.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        add_row("interact", self.spin_interact_step, "sim.interact.unit", "")
+        #add_row("interact", self.spin_interact_step, "sim.interact.unit", "")
 
         # Добавляем спинбокс для количества бинов
         self.spin_bins = QtWidgets.QSpinBox()
@@ -1495,7 +1495,7 @@ class SimulationWidget(QtWidgets.QWidget):
         set_lbl("lbl_vessel", "sim.vessel")
         set_lbl("help_vessel", "sim.vessel.help")
         set_lbl("lbl_interact", "sim.interact")
-        set_lbl("unit_interact", "sim.interact.unit")
+        #set_lbl("unit_interact", "sim.interact.unit")
         set_lbl("lbl_bins", "sim.bins")
         set_lbl("help_bins", "sim.bins.help")
 
