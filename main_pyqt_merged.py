@@ -102,6 +102,7 @@ STRINGS = {
         "authors.title": "Команда разработчиков",
         "authors.name1": "Енягин Станислав",
         "authors.name2": "Кожемякова Елизавета",
+        "boss": "Научный руководитель : Чичигина Ольга Александровна",
         "authors.back": "Вернуться",
     },
     "en": {
@@ -171,8 +172,9 @@ STRINGS = {
 
         "menu.authors": "Authors",
         "authors.title": "Development Team",
-        "authors.name1": "Stanislav Enyagin",
+        "authors.name1": "Stanislav Eniagin",
         "authors.name2": "Elizaveta Kozhemyakova",
+        "boss": "Scientific supervisor: Olga Aleksandrovna Chichigina",
         "authors.back": "Back",
     },
     "cn": {
@@ -207,6 +209,7 @@ STRINGS = {
         "sim.eps.unit": "千焦/摩尔",
         "sim.eps.help": "能量尺度",
         "sim.sigma": "σ",
+        "boss": "奇奇吉娜·奥尔加·亚历山德罗夫娜",
         "sim.sigma.unit": "单位",
         "sim.sigma.help": "LJ特征距离",
         "sim.De": "De",
@@ -1559,46 +1562,70 @@ class AuthorsWidget(QtWidgets.QWidget):
         # Используем локализацию
         self.title_label = QtWidgets.QLabel()
         self.title_label.setStyleSheet("font-size:24pt; font-weight:700;")
-        self.title_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)  # ВЫРАВНИВАНИЕ
+        self.title_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.title_label)
 
         cards = QtWidgets.QHBoxLayout()
         layout.addLayout(cards)
 
+        # -------- LEFT (author 1): имя сверху, фото снизу --------
         left = QtWidgets.QVBoxLayout()
+        left.addSpacing(80)
+        left.setSpacing(6)  # 🔹 уменьшили расстояние между текстом и фото
+        left.setContentsMargins(0, 0, 0, 0)  # 🔹 убрали внутренние поля
+
+        self.name1_label = QtWidgets.QLabel()
+        self.name1_label.setStyleSheet("font-size:16pt; font-weight:600;")
+        self.name1_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        left.addWidget(self.name1_label)  # <-- СНАЧАЛА ТЕКСТ
+
         pix = self._load_sticker("author1.png") or self._load_sticker("author1.jpg")
         if pix:
             lbl = QtWidgets.QLabel()
             lbl.setPixmap(pix)
-            lbl.setFixedSize(420, 420)  # ФИКСИРУЕМ РАЗМЕР
+            lbl.setFixedSize(400, 500)
             lbl.setScaledContents(True)
-            left.addWidget(lbl, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
+            left.addWidget(lbl, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)  # <-- ПОТОМ ФОТО
 
-        self.name1_label = QtWidgets.QLabel()
-        self.name1_label.setStyleSheet("font-size:16pt; font-weight:600;")
-        self.name1_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)  # ВЫРАВНИВАНИЕ
-        left.addWidget(self.name1_label)
         cards.addLayout(left)
 
+        # -------- RIGHT (author 2): имя сверху, фото снизу --------
         right = QtWidgets.QVBoxLayout()
+        right.addSpacing(80)
+        right.setSpacing(6)  # 🔹 уменьшили расстояние между текстом и фото
+        right.setContentsMargins(0, 0, 0, 0)  # 🔹 убрали внутренние поля
+
+        self.name2_label = QtWidgets.QLabel()
+        self.name2_label.setStyleSheet("font-size:16pt; font-weight:600;")
+        self.name2_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        right.addWidget(self.name2_label)  # <-- СНАЧАЛА ТЕКСТ
+
         pix2 = self._load_sticker("author2.png") or self._load_sticker("author2.jpg")
         if pix2:
             lbl2 = QtWidgets.QLabel()
             lbl2.setPixmap(pix2)
-            lbl2.setFixedSize(420, 420)  # ФИКСИРУЕМ РАЗМЕР
+            lbl2.setFixedSize(400, 500)
             lbl2.setScaledContents(True)
-            right.addWidget(lbl2, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
+            right.addWidget(lbl2, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)  # <-- ПОТОМ ФОТО
 
-        self.name2_label = QtWidgets.QLabel()
-        self.name2_label.setStyleSheet("font-size:16pt; font-weight:600;")
-        self.name2_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)  # ВЫРАВНИВАНИЕ
-        right.addWidget(self.name2_label)
         cards.addLayout(right)
 
+        # Сделаем колонки одинаковой ширины
+        cards.setStretch(0, 1)
+        cards.setStretch(1, 1)
+
+        # -------- BOSS (по центру снизу, только текст) --------
+        self.boss_label = QtWidgets.QLabel()
+        self.boss_label.setStyleSheet("font-size:16pt; font-weight:600;")
+        self.boss_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        # Прижимаем низ: сначала растяжка, затем boss, затем кнопка
         layout.addStretch(1)
+        layout.addWidget(self.boss_label, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
+        layout.addSpacing(12)
 
         self.back_btn = QtWidgets.QPushButton()
-        self.back_btn.setFixedSize(200, 48)  # ФИКСИРУЕМ РАЗМЕР
+        self.back_btn.setFixedSize(200, 48)
         self.back_btn.setStyleSheet("background:#313132;color:white;font-weight:600;font-size:12pt;border-radius:6px;")
         self.back_btn.clicked.connect(self.back_cb)
         layout.addWidget(self.back_btn, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
@@ -1612,6 +1639,7 @@ class AuthorsWidget(QtWidgets.QWidget):
         self.title_label.setText(s["authors.title"])
         self.name1_label.setText(s["authors.name1"])
         self.name2_label.setText(s["authors.name2"])
+        self.boss_label.setText(s["boss"])
         self.back_btn.setText(s["authors.back"])
 
 
