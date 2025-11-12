@@ -21,6 +21,8 @@ from matplotlib import patches
 
 from numba import njit, prange
 
+import logging
+import matplotlib
 
 # ====================== Локализация ======================
 
@@ -252,20 +254,20 @@ STRINGS = {
 @dataclass
 class PotentialParams:
     kind: str = "Нет"
-    k: float = 1.0
-    epsilon: float = 1.0
-    sigma: float = 0.03
-    De: float = 1.0
-    a: float = 2.0
-    r0: float = 0.025
-    rcut_lr: float = 0.3
+    k: float = 100.0
+    epsilon: float = 10.0
+    sigma: float = 15.0 
+    De: float = 20.0
+    a: float = 0.5 # было 0.02
+    r0: float = 2.5  # было 2.5
+    rcut_lr: float = 80.0  # было 30.0
 
 
 @dataclass
 class Vessel:
     kind: str = "Прямоугольник"
-    rect: tuple = (-1.0, -1.0, 1.0, 1.0)
-    circle: tuple = (0.0, 0.0, 1.0)
+    rect: tuple = (-100.0, -100.0, 100.0, 100.0)
+    circle: tuple = (0.0, 0.0, 100.0)
     poly: np.ndarray | None = None
 
     def contains(self, p: np.ndarray) -> bool:
@@ -292,22 +294,26 @@ class Vessel:
             xmax, ymax = self.poly.max(axis=0)
             return (xmin + margin, ymin + margin, xmax - margin, ymax - margin)
         else:
-            return (-1 + margin, -1 + margin, 1 - margin, 1 - margin)
+            return (-100 + margin, -100 + margin, 100 - margin, 100 - margin)
 
 
 @njit(fastmath=True, cache=True)
 def compute_forces_numba(pos, params_kind, k, epsilon, sigma, De, a, r0, rcut_lr, mass):
     N = pos.shape[0]
     F = np.zeros((N, 2), dtype=np.float64)
-    rcut = 0.0
-    if params_kind == 3:
-        rcut = 2.5 * max(sigma, 1e-6)
-    elif params_kind == 4:
-        rcut = r0 + max(3.0 / a, 0.05)
+
+    # Радиусы отсечения адаптированы под большие масштабы
+    if params_kind == 3:  # Lennard-Jones
+        rcut = 3.0 * sigma
+    elif params_kind == 4:  # Morse
+        rcut = r0 + 5.0 / a
     elif params_kind in (1, 2):
         rcut = rcut_lr
-    rcut2 = rcut * rcut if rcut > 0 else 1e10
-    rmin = 0.1 * sigma if sigma > 0 else 1e-4
+    else:
+        rcut = 0.0
+
+    rcut2 = rcut * rcut if rcut > 0 else 1e20
+    rmin = max(0.1 * sigma, 0.001)
 
     for i in prange(N):
         xi, yi = pos[i]
@@ -316,74 +322,90 @@ def compute_forces_numba(pos, params_kind, k, epsilon, sigma, De, a, r0, rcut_lr
             dx = xj - xi
             dy = yj - yi
             r2 = dx * dx + dy * dy
-            if r2 > rcut2 or r2 < 1e-12:
+            if r2 > rcut2:
                 continue
+            if r2 < 1e-14:
+                r2 = 1e-14
             r = math.sqrt(r2)
             if r < rmin:
                 r = rmin
-                r2 = r * r
+
             invr = 1.0 / r
             nx = dx * invr
             ny = dy * invr
-            MAX_FORCE = 1e2
+
             mag = 0.0
-            if params_kind == 1:
-                mag = k / r2
-                if mag > MAX_FORCE:
-                    mag = MAX_FORCE
-            elif params_kind == 2:
-                mag = -k / r2
-                if abs(mag) > MAX_FORCE:
-                    mag = -MAX_FORCE if mag < 0 else MAX_FORCE
-            elif params_kind == 3:
+
+            if params_kind == 1:  # Отталкивание ~ k / r^2
+                mag = k / r /r
+
+            elif params_kind == 2:  # Притяжение ~ -k / r^2
+                mag = -k / r / r
+
+            elif params_kind == 3:  # Lennard-Jones (12-6)
+                # F = 24ε(2(σ/r)^12 - (σ/r)^6) / r
                 sr = sigma / r
-                sr6 = sr * sr * sr * sr * sr * sr
+                sr6 = sr**6
                 sr12 = sr6 * sr6
                 mag = 24.0 * epsilon * (2.0 * sr12 - sr6) / r
-            elif params_kind == 4:
+
+            elif params_kind == 4:  # Morse
+                # F = 2Dea e^{-a(r - r0)}(1 - e^{-a(r - r0)})
                 d = r - r0
                 ea = math.exp(-a * d)
                 mag = 2.0 * De * a * ea * (1.0 - ea)
+
             fx = mag * nx
             fy = mag * ny
+
             F[i, 0] -= fx
             F[i, 1] -= fy
             F[j, 0] += fx
             F[j, 1] += fy
+
     return F
 
 
 @njit(fastmath=True, cache=True)
-def handle_particle_collisions(pos, vel, radius, dt):
+def handle_particle_collisions(pos, vel, radius, mass):
     N = pos.shape[0]
+    restitution = 0.9
     for i in range(N):
         for j in range(i + 1, N):
             dx = pos[j, 0] - pos[i, 0]
             dy = pos[j, 1] - pos[i, 1]
             r2 = dx * dx + dy * dy
             min_dist = 2.0 * radius
-            min_dist2 = min_dist * min_dist
-            if r2 < min_dist2 and r2 > 1e-12:
+            if r2 < (min_dist * min_dist):
                 r = math.sqrt(r2)
+                if r < 1e-8:
+                    continue
                 nx = dx / r
                 ny = dy / r
+
+                # позиционная коррекция (устраняем наложение)
+                penetration = min_dist - r
+                correction = 0.5 * penetration + 1e-3
+                pos[i, 0] -= correction * nx
+                pos[i, 1] -= correction * ny
+                pos[j, 0] += correction * nx
+                pos[j, 1] += correction * ny
+
+                # импульсная коррекция скоростей
                 dvx = vel[j, 0] - vel[i, 0]
                 dvy = vel[j, 1] - vel[i, 1]
                 vn = dvx * nx + dvy * ny
-                if vn > 0:
-                    continue
-                impulse = 2.0 * vn / 2.0
-                vel[i, 0] += impulse * nx
-                vel[i, 1] += impulse * ny
-                vel[j, 0] -= impulse * nx
-                vel[j, 1] -= impulse * ny
-                overlap = (min_dist - r) / 2.0 + 0.001
-                pos[i, 0] -= overlap * nx
-                pos[i, 1] -= overlap * ny
-                pos[j, 0] += overlap * nx
-                pos[j, 1] += overlap * ny
+                if vn < 0:
+                    j_imp = -(1.0 + restitution) * vn / (2.0 / mass)
+                    jx = j_imp * nx
+                    jy = j_imp * ny
+                    vel[i, 0] -= jx / mass
+                    vel[i, 1] -= jy / mass
+                    vel[j, 0] += jx / mass
+                    vel[j, 1] += jy / mass
 
 
+               
 @njit(fastmath=True, cache=True)
 def pairwise_distances_fast_numba(pos, max_pairs=10000):
     N = pos.shape[0]
@@ -437,7 +459,6 @@ def reflect_rectangular_numba(pos, vel, radius, xmin, ymin, xmax, ymax):
         pos[i] = p
         vel[i] = v
 
-
 @njit(fastmath=True, cache=True)
 def reflect_circular_numba(pos, vel, radius, cx, cy, R):
     N = pos.shape[0]
@@ -453,62 +474,71 @@ def reflect_circular_numba(pos, vel, radius, cx, cy, R):
             if dist > 0:
                 nx = dx / dist
                 ny = dy / dist
-                dot = v[0] * nx + v[1] * ny
-                v[0] -= 2.0 * dot * nx * 0.95
-                v[1] -= 2.0 * dot * ny * 0.95
+                # Корректируем позицию
                 p[0] = cx + nx * R_eff
                 p[1] = cy + ny * R_eff
+                # Отражаем скорость
+                dot = v[0] * nx + v[1] * ny
+                v[0] -= 2.0 * dot * nx * 0.95
+                v[1] -= 2.0 * dot * ny * 0.95      
         pos[i] = p
         vel[i] = v
-
 
 @njit(fastmath=True, cache=True)
 def reflect_polygonal_numba(pos, vel, radius, poly):
     N = pos.shape[0]
     M = poly.shape[0]
     for i in range(N):
-        p = pos[i];
+        p = pos[i]
         v = vel[i]
         min_dist = 1e10
         closest = np.array([0.0, 0.0])
         normal = np.array([0.0, 0.0])
+        
         for a in range(M):
             b = (a + 1) % M
             x1, y1 = poly[a]
             x2, y2 = poly[b]
-            ex = x2 - x1;
+            ex = x2 - x1
             ey = y2 - y1
             el2 = ex * ex + ey * ey
             if el2 < 1e-12: continue
-            tox = p[0] - x1;
+            
+            tox = p[0] - x1
             toy = p[1] - y1
             t = (tox * ex + toy * ey) / el2
             t = min(max(t, 0.0), 1.0)
-            cx = x1 + t * ex;
+            cx = x1 + t * ex
             cy = y1 + t * ey
-            dx = p[0] - cx;
+            dx = p[0] - cx
             dy = p[1] - cy
             dist = math.sqrt(dx * dx + dy * dy)
+            
             if dist < min_dist:
                 min_dist = dist
-                closest[0] = cx;
+                closest[0] = cx
                 closest[1] = cy
                 if dist > 1e-12:
-                    normal[0] = dx / dist;
+                    normal[0] = dx / dist
                     normal[1] = dy / dist
                 else:
                     L = math.sqrt(el2)
-                    normal[0] = -ey / L;
+                    normal[0] = -ey / L
                     normal[1] = ex / L
+        
         if min_dist < radius:
+            # Корректируем позицию
+            overlap = radius - min_dist
+            p[0] += overlap * normal[0]
+            p[1] += overlap * normal[1]
+            
+            # Отражаем скорость
             dot = v[0] * normal[0] + v[1] * normal[1]
-            if dot < 0:
+            if dot < 0:  # Только если движется внутрь
                 v[0] -= 2.0 * dot * normal[0] * 0.95
                 v[1] -= 2.0 * dot * normal[1] * 0.95
-            overlap = radius - min_dist + 0.001
-            p[0] += overlap * normal[0];
-            p[1] += overlap * normal[1]
-        pos[i] = p;
+                
+        pos[i] = p
         vel[i] = v
 
 
@@ -516,15 +546,15 @@ def reflect_polygonal_numba(pos, vel, radius, poly):
 class System:
     vessel: Vessel
     N: int = 10
-    radius: float = 0.03
-    visual_radius: float = 0.03
-    temp: float = 0.5
-    dt: float = 0.002
+    radius: float = 3.0
+    visual_radius: float = 3.0
+    temp: float = 5
+    dt: float = 0.1
     params: PotentialParams = field(default_factory=PotentialParams)
     mass: float = 1.0
     friction_gamma: float = 0.0
     enable_collisions: bool = True
-    interaction_step: int = 10
+    interaction_step: int = 1
     step: int = 0
     pos: np.ndarray | None = None
     vel: np.ndarray | None = None
@@ -624,7 +654,7 @@ class System:
         self.pos = np.array(placed_positions)
 
     def _polygon_area(self, poly):
-        x = poly[:, 0];
+        x = poly[:, 0]
         y = poly[:, 1]
         return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
 
@@ -650,42 +680,70 @@ class System:
             "Леннард-Джонс": 3, "Lennard-Jones": 3, "伦纳德-琼斯": 3,
             "Морзе": 4, "Morse": 4, "莫尔斯": 4
         }
+
         kind_code = kind_mapping.get(self.params.kind, 0)
         return compute_forces_numba(self.pos, kind_code, self.params.k, self.params.epsilon,
                                     self.params.sigma, self.params.De, self.params.a, self.params.r0,
                                     self.params.rcut_lr, self.mass)
 
     def integrate(self):
-        if self.pos is None: return
-        max_speed = 2.0
-        speeds = np.linalg.norm(self.vel, axis=1)
-        too_fast = speeds > max_speed
-        if np.any(too_fast):
-            self.vel[too_fast] *= (max_speed / speeds[too_fast])[:, None]
+        if self.pos is None: 
+            return
+            
         self.step += 1
+
+        if self.F_old is None or self.F_old.shape[0] != self.pos.shape[0]:
+            self.F_old = np.zeros_like(self.pos)
+        
+        # ПРАВИЛЬНЫЙ Velocity Verlet алгоритм:
+        # 1. Обновляем позиции используя текущие скорости и силы
+        if self.F_old is not None:
+            self.pos += self.vel * self.dt + 0.5 * self.F_old / self.mass * self.dt * self.dt
+        else:
+            self.pos += self.vel * self.dt
+        
+        # 2. Вычисляем новые силы
         do_interact = (self.step % max(1, self.interaction_step) == 0)
         if do_interact:
             F_new = self.compute_forces()
+            # Ограничиваем силу для стабильности
             mags = np.linalg.norm(F_new, axis=1)
-            if np.any(mags > 100.0):
-                F_new *= (100.0 / np.max(mags))
+            if np.any(mags > 500.0):
+                F_new *= (500.0 / np.max(mags))
         else:
             F_new = self.F_old if self.F_old is not None else np.zeros_like(self.vel)
-        vel_half = self.vel + 0.5 * (F_new + (self.F_old if self.F_old is not None else 0.0)) / self.mass * self.dt
-        pos_new = self.pos + vel_half * self.dt
+        
+        # 3. Обновляем скорости используя среднее старых и новых сил
+        if self.F_old is not None:
+            self.vel += 0.5 * (self.F_old + F_new) / self.mass * self.dt
+        else:
+            self.vel += 0.5 * F_new / self.mass * self.dt
+        
+        # Сохраняем силы для следующего шага
+        self.F_old = F_new.copy() if F_new is not None else np.zeros_like(self.vel)
+        
+        # Обработка столкновений
+        if self.enable_collisions and do_interact:
+            handle_particle_collisions(self.pos, self.vel, self.radius, self.mass)
+        
+        # Граничные условия
         if self.vessel.kind in ("rect", "Прямоугольник"):
             xmin, ymin, xmax, ymax = self.vessel.rect
-            reflect_rectangular_numba(pos_new, vel_half, self.radius, xmin, ymin, xmax, ymax)
+            reflect_rectangular_numba(self.pos, self.vel, self.radius, xmin, ymin, xmax, ymax)
         elif self.vessel.kind in ("circle", "Круг"):
             cx, cy, R = self.vessel.circle
-            reflect_circular_numba(pos_new, vel_half, self.radius, cx, cy, R)
+            reflect_circular_numba(self.pos, self.vel, self.radius, cx, cy, R)
         elif self.vessel.kind in ("poly", "Многоугольник") and self.vessel.poly is not None:
-            reflect_polygonal_numba(pos_new, vel_half, self.radius, self.vessel.poly)
-        if self.enable_collisions and do_interact:
-            handle_particle_collisions(pos_new, vel_half, self.radius, self.dt)
-        self.F_old[:] = F_new
-        self.pos[:] = pos_new
-        self.vel[:] = vel_half
+            reflect_polygonal_numba(self.pos, self.vel, self.radius, self.vessel.poly)
+        
+        # Ограничение скорости для стабильности
+        # max_speed = 50.0
+        # speeds = np.linalg.norm(self.vel, axis=1)
+        # too_fast = speeds > max_speed
+        # if np.any(too_fast):
+        #     self.vel[too_fast] *= (max_speed / speeds[too_fast])[:, None]
+        
+        # Трение
         if self.friction_gamma > 0:
             damp = math.exp(-self.friction_gamma * self.dt)
             self.vel *= damp
@@ -809,7 +867,7 @@ class MainMenuWidget(QtWidgets.QWidget):
         self.btn_start = QtWidgets.QPushButton()
         self.btn_start.setFixedSize(240, 50)  # ФИКСИРУЕМ РАЗМЕР
         self.btn_start.setStyleSheet(
-            "background:#3271a8; color:white; font-weight:600; font-size:12pt; border-radius:6px; margin-top:10px;"
+            "background:#3271a8; color:white; font-weight:600; font-size:14pt; border-radius:6px; margin-top:10px;"
         )
         self.btn_start.clicked.connect(self.start_cb)
         center.addWidget(self.btn_start, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -819,7 +877,7 @@ class MainMenuWidget(QtWidgets.QWidget):
             self.btn_authors = QtWidgets.QPushButton()
             self.btn_authors.setFixedSize(240, 50)  # ФИКСИРУЕМ РАЗМЕР
             self.btn_authors.setStyleSheet(
-                "background:#a6b2bd; color:white; font-weight:600; font-size:12pt; border-radius:6px; margin-top:10px;"
+                "background:#a6b2bd; color:white; font-weight:600; font-size:14pt; border-radius:6px; margin-top:10px;"
             )
             self.btn_authors.clicked.connect(self.authors_cb)
             center.addWidget(self.btn_authors, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -828,7 +886,7 @@ class MainMenuWidget(QtWidgets.QWidget):
         self.btn_exit = QtWidgets.QPushButton()
         self.btn_exit.setFixedSize(240, 50)  # ФИКСИРУЕМ РАЗМЕР
         self.btn_exit.setStyleSheet(
-            "background:#f78765; color:white; font-weight:600; font-size:12pt; border-radius:6px; margin-top:10px;"
+            "background:#f78765; color:white; font-weight:600; font-size:14pt; border-radius:6px; margin-top:10px;"
         )
         self.btn_exit.clicked.connect(QtWidgets.QApplication.instance().quit)
         center.addWidget(self.btn_exit, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -897,84 +955,103 @@ class SimulationWidget(QtWidgets.QWidget):
             row = QtWidgets.QHBoxLayout()
             lbl = QtWidgets.QLabel()  # текст поставим в update_language
             lbl.setObjectName(f"lbl_{key_label}")
-            lbl.setFixedWidth(90)  # ФИКСИРУЕМ ШИРИНУ
+            lbl.setStyleSheet("font-size:12pt;")
+            lbl.setFixedWidth(100)  # ФИКСИРУЕМ ШИРИНУ
             if key_help:
                 h = QtWidgets.QLabel()
                 h.setObjectName(f"help_{key_label}")
                 h.setWordWrap(True)
-                h.setStyleSheet("color:#555;font-size:9pt;margin-top:2px;")
+                h.setStyleSheet("color:#555;font-size:12pt;margin-top:2px;")
                 sp_layout.addWidget(h)
             row.addWidget(lbl)
             row.addWidget(widget)
+            widget.setStyleSheet("font-size:10pt;")
             if key_unit:
                 u = QtWidgets.QLabel()
                 u.setObjectName(f"unit_{key_label}")
                 u.setFixedWidth(80)  # ФИКСИРУЕМ ШИРИНУ
+                u.setStyleSheet("font-size:12pt;")
                 row.addWidget(u)
             sp_layout.addLayout(row)
 
-        self.spin_N = QtWidgets.QSpinBox();
-        self.spin_N.setRange(5, 50);
+        self.spin_N = QtWidgets.QSpinBox()
+        self.spin_N.setRange(5, 50)
         self.spin_N.setValue(10)
+        self.spin_N.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("N", self.spin_N, "sim.N.unit", "sim.N.help")
 
-        self.edit_R = QtWidgets.QDoubleSpinBox();
-        self.edit_R.setRange(0.003, 0.12);
-        self.edit_R.setSingleStep(0.001)
-        self.edit_R.setDecimals(3);
-        self.edit_R.setValue(0.03)
+        self.edit_R = QtWidgets.QDoubleSpinBox()
+        self.edit_R.setRange(0.5, 7.0)   # Изменить диапазон для нового масштаба
+        self.edit_R.setSingleStep(0.1)
+        self.edit_R.setDecimals(1)
+        self.edit_R.setValue(3.0)
+        self.edit_R.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("R", self.edit_R, "sim.R.unit", "sim.R.help")
 
-        self.edit_T = QtWidgets.QDoubleSpinBox();
-        self.edit_T.setRange(0.01, 5.0);
-        self.edit_T.setSingleStep(0.1)
-        self.edit_T.setValue(0.5)
+        self.edit_T = QtWidgets.QDoubleSpinBox()
+        self.edit_T.setRange(1, 15)
+        self.edit_T.setSingleStep(1)
+        self.edit_T.setValue(5)
+        self.edit_T.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("T", self.edit_T, "sim.T.unit", "sim.T.help")
 
-        self.edit_m = QtWidgets.QDoubleSpinBox();
-        self.edit_m.setRange(0.01, 100.0);
+        self.edit_m = QtWidgets.QDoubleSpinBox()
+        self.edit_m.setRange(0.01, 100.0)
         self.edit_m.setSingleStep(0.1)
         self.edit_m.setValue(1.0)
+        self.edit_m.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("m", self.edit_m, "sim.m.unit", "sim.m.help")
 
         self.check_collisions = WinCheckBox()
+        self.check_collisions.stateChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
+        self.check_collisions.setStyleSheet("font-size:12pt;")
+        self.check_collisions.setChecked(True)
         sp_layout.addWidget(self.check_collisions)
 
         self.pot_box = QtWidgets.QComboBox()
+        self.pot_box.currentIndexChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("pot", self.pot_box, "", "sim.pot.help")
 
-        self.edit_eps = QtWidgets.QDoubleSpinBox();
-        self.edit_eps.setRange(0.0, 50.0);
+        self.edit_eps = QtWidgets.QDoubleSpinBox()
+        self.edit_eps.setRange(0.0, 50.0)
         self.edit_eps.setValue(1.0)
+        self.edit_eps.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("eps", self.edit_eps, "sim.eps.unit", "sim.eps.help")
 
-        self.edit_sigma = QtWidgets.QDoubleSpinBox();
-        self.edit_sigma.setRange(0.001, 0.2);
-        self.edit_sigma.setValue(0.02)
+        self.edit_sigma = QtWidgets.QDoubleSpinBox()
+        self.edit_sigma.setRange(2.0, 20.0)  # Изменить диапазон
+        self.edit_sigma.setValue(15.0)
+        self.edit_sigma.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("sigma", self.edit_sigma, "sim.sigma.unit", "sim.sigma.help")
 
-        self.edit_De = QtWidgets.QDoubleSpinBox();
-        self.edit_De.setRange(0.0, 50.0);
+        self.edit_De = QtWidgets.QDoubleSpinBox()
+        self.edit_De.setRange(0.0, 50.0)
         self.edit_De.setValue(1.0)
+        self.edit_De.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("De", self.edit_De, "sim.De.unit", "sim.De.help")
 
-        self.edit_a = QtWidgets.QDoubleSpinBox();
-        self.edit_a.setRange(0.1, 50.0);
-        self.edit_a.setValue(2.0)
+        self.edit_a = QtWidgets.QDoubleSpinBox()
+        self.edit_a.setRange(0.05, 2.0)  # было (0.001, 0.5)
+        self.edit_a.setValue(0.3)
+        self.edit_a.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("a", self.edit_a, "sim.a.unit", "sim.a.help")
 
-        self.edit_r0 = QtWidgets.QDoubleSpinBox();
-        self.edit_r0.setRange(0.001, 0.5);
-        self.edit_r0.setValue(0.025)
+        self.edit_r0 = QtWidgets.QDoubleSpinBox()
+        self.edit_r0.setRange(1, 10.0)  # было (0.1, 50.0)
+        self.edit_r0.setValue(2.5) 
+        self.edit_r0.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("r0", self.edit_r0, "sim.r0.unit", "sim.r0.help")
 
-        self.vessel_box = QtWidgets.QComboBox();
+        self.vessel_box = QtWidgets.QComboBox()
         self.vessel_box.addItems(["Прямоугольник", "Круг", "Многоугольник"])
+        self.vessel_box.currentIndexChanged.connect(self._on_vessel_changed)  # ОСОБАЯ ОБРАБОТКА
+        self.vessel_box.setStyleSheet("font-size:12pt;color: black;")
         add_row("vessel", self.vessel_box, "", "sim.vessel.help")
 
-        self.spin_interact_step = QtWidgets.QSpinBox();
-        self.spin_interact_step.setRange(1, 1000);
-        self.spin_interact_step.setValue(10)
+        self.spin_interact_step = QtWidgets.QSpinBox()
+        self.spin_interact_step.setRange(1, 1000)
+        self.spin_interact_step.setValue(1)
+        self.spin_interact_step.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("interact", self.spin_interact_step, "sim.interact.unit", "")
 
         # Добавляем спинбокс для количества бинов
@@ -987,34 +1064,40 @@ class SimulationWidget(QtWidgets.QWidget):
         sp_layout.addSpacing(8)
         self.btn_draw = QtWidgets.QPushButton()
         self.btn_draw.clicked.connect(self._enter_draw_mode)
-        self.btn_draw.setFixedHeight(35)  # ФИКСИРУЕМ ВЫСОТУ
+        self.btn_draw.setFixedHeight(25)  # ФИКСИРУЕМ ВЫСОТУ
+        self.btn_draw.setStyleSheet("font-size:11pt;")
         sp_layout.addWidget(self.btn_draw)
 
         self.btn_clear = QtWidgets.QPushButton()
         self.btn_clear.clicked.connect(self._clear_poly)
-        self.btn_clear.setFixedHeight(35)  # ФИКСИРУЕМ ВЫСОТУ
+        self.btn_clear.setFixedHeight(25)  # ФИКСИРУЕМ ВЫСОТУ
+        self.btn_clear.setStyleSheet("font-size:11pt;")
         sp_layout.addWidget(self.btn_clear)
 
         self.btn_run = QtWidgets.QPushButton()
         self.btn_run.clicked.connect(self._toggle_run)
-        self.btn_run.setFixedHeight(35)  # ФИКСИРУЕМ ВЫСОТУ
+        self.btn_run.setFixedHeight(25)  # ФИКСИРУЕМ ВЫСОТУ
+        self.btn_run.setStyleSheet("font-size:11pt;")
         sp_layout.addWidget(self.btn_run)
 
-        self.btn_apply = QtWidgets.QPushButton()
-        self.btn_apply.clicked.connect(self._apply_settings)
-        self.btn_apply.setFixedHeight(35)  # ФИКСИРУЕМ ВЫСОТУ
-        sp_layout.addWidget(self.btn_apply)
+        # self.btn_apply = QtWidgets.QPushButton()
+          
+        # self.btn_apply.setFixedHeight(25)  # ФИКСИРУЕМ ВЫСОТУ
+        # self.btn_apply.setStyleSheet("font-size:11pt;")
+        # sp_layout.addWidget(self.btn_apply)
 
         self.btn_back = QtWidgets.QPushButton()
         self.btn_back.clicked.connect(self.back_cb)
-        self.btn_back.setFixedHeight(35)  # ФИКСИРУЕМ ВЫСОТУ
+        self.btn_back.setFixedHeight(25)  # ФИКСИРУЕМ ВЫСОТУ
+        self.btn_back.setStyleSheet("font-size:11pt;")
         sp_layout.addStretch(1)
         sp_layout.addWidget(self.btn_back)
 
-        self.btn_collapse = QtWidgets.QPushButton()
-        self.btn_collapse.clicked.connect(self._toggle_settings)
-        self.btn_collapse.setFixedHeight(35)  # ФИКСИРУЕМ ВЫСОТУ
-        sp_layout.addWidget(self.btn_collapse)
+        # self.btn_collapse = QtWidgets.QPushButton()
+        # self.btn_collapse.clicked.connect(self._toggle_settings)
+        # self.btn_collapse.setFixedHeight(25)  # ФИКСИРУЕМ ВЫСОТУ
+        # self.btn_collapse.setStyleSheet("font-size:11pt;")
+        # sp_layout.addWidget(self.btn_collapse)
 
         canvas_container = QtWidgets.QHBoxLayout()
         main_l.addWidget(self.settings_panel)
@@ -1029,6 +1112,7 @@ class SimulationWidget(QtWidgets.QWidget):
         top_bar = QtWidgets.QHBoxLayout()
         self.btn_toggle_settings_small = QtWidgets.QPushButton()
         self.btn_toggle_settings_small.setFixedSize(110, 28)  # ФИКСИРУЕМ РАЗМЕР
+        self.btn_toggle_settings_small.setStyleSheet("font-size:10pt;")
         self.btn_toggle_settings_small.clicked.connect(self._toggle_settings)
         top_bar.addWidget(self.btn_toggle_settings_small, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
         top_bar.addStretch(1)
@@ -1036,6 +1120,8 @@ class SimulationWidget(QtWidgets.QWidget):
 
         self.fig_anim = plt.Figure(figsize=(6, 6))
         self.ax_anim = self.fig_anim.add_subplot(111)
+        self.ax_anim.set_xticks([])
+        self.ax_anim.set_yticks([])
         self.ax_anim.set_aspect('equal')
         self.canvas_anim = FigureCanvas(self.fig_anim)
         self.canvas_anim.setMinimumSize(600, 600)  # ФИКСИРУЕМ МИНИМАЛЬНЫЙ РАЗМЕР
@@ -1053,26 +1139,133 @@ class SimulationWidget(QtWidgets.QWidget):
 
         self.draw_mode = False
         self.poly_points = []
+        
+        # Изначально обновляем состояние кнопок полигона
+        self._update_polygon_buttons_state()
 
     def _on_bins_changed(self, value):
         self.bins_count = value
         self._update_histograms()
 
-    def _init_simulation(self, N=10, radius=0.03, temp=0.3, dt=0.002,
+    def _on_settings_changed(self):
+        # Динамическое применение настроек без перезапуска симуляции
+        if hasattr(self, 'system') and self.system is not None:
+            # Обновляем параметры системы
+            self.system.N = int(self.spin_N.value())
+            self.system.radius = float(self.edit_R.value())
+            self.system.visual_radius = float(self.edit_R.value())
+            self.system.temp = float(self.edit_T.value())
+            self.system.mass = float(self.edit_m.value())
+            self.system.enable_collisions = self.check_collisions.isChecked()
+            self.system.interaction_step = int(self.spin_interact_step.value())
+            
+            # Обновляем параметры потенциала
+            self.system.params.kind = str(self.pot_box.currentText())
+            self.system.params.epsilon = float(self.edit_eps.value())
+            self.system.params.sigma = float(self.edit_sigma.value())
+            self.system.params.De = float(self.edit_De.value())
+            self.system.params.a = float(self.edit_a.value())
+            self.system.params.r0 = float(self.edit_r0.value())
+            
+            # Если изменилось количество частиц, пересоздаем систему
+            # if self.system.n() != self.system.N:
+            self._reinitialize_system()
+            # else:
+                # Иначе просто обновляем визуализацию
+            # self._update_particle_visualization()
+
+    def _on_vessel_changed(self):
+        # Особая обработка изменения типа сосуда
+        vessel_kind = str(self.vessel_box.currentText())
+        
+        # Обновляем состояние кнопок полигона
+        self._update_polygon_buttons_state()
+        
+        # Если выбран не полигон, выходим из режима рисования
+        if vessel_kind not in ("poly", "Многоугольник"):
+            self.draw_mode = False
+            self.poly_points = []
+        
+        # Применяем изменение сосуда
+        self._on_settings_changed()
+
+    def _update_polygon_buttons_state(self):
+        """Обновляет состояние кнопок рисования полигона в зависимости от выбранного типа сосуда"""
+        vessel_kind = str(self.vessel_box.currentText())
+        is_polygon_mode = vessel_kind in ("poly", "Многоугольник")
+        
+        self.btn_draw.setEnabled(is_polygon_mode)
+        self.btn_clear.setEnabled(is_polygon_mode)
+        
+        # Визуальная индикация отключенного состояния
+        if not is_polygon_mode:
+            self.btn_draw.setStyleSheet("font-size:11pt; background-color: #cccccc; color: #666666;")
+            self.btn_clear.setStyleSheet("font-size:11pt; background-color: #cccccc; color: #666666;")
+        else:
+            self.btn_draw.setStyleSheet("font-size:11pt;")
+            self.btn_clear.setStyleSheet("font-size:11pt;")
+
+    def _reinitialize_system(self):
+        """Полная переинициализация системы с текущими настройками"""
+        N = int(self.spin_N.value())
+        radius = float(self.edit_R.value()) 
+        temp = float(self.edit_T.value())
+        dt = 0.1
+        mass = float(self.edit_m.value())
+        enable_collisions = self.check_collisions.isChecked()
+        interaction_step = int(self.spin_interact_step.value())
+        pot_params = PotentialParams(
+            kind=str(self.pot_box.currentText()),
+            epsilon=float(self.edit_eps.value()),
+            sigma=float(self.edit_sigma.value()),
+            De=float(self.edit_De.value()),
+            a=float(self.edit_a.value()),
+            r0=float(self.edit_r0.value()),
+        )
+        vessel_kind = str(self.vessel_box.currentText())
+        poly = self.system.vessel.poly if vessel_kind in ("poly", "Многоугольник") else None
+
+        # Сбрасываем накопленные данные при изменении параметров
+        self.accumulated_x = np.array([])
+        self.accumulated_y = np.array([])
+        self.accumulated_distances = np.array([])
+
+        self._init_simulation(N=N, radius=radius, temp=temp, dt=dt, vessel_kind=vessel_kind, poly=poly,
+                              potential_params=pot_params, mass=mass, enable_collisions=enable_collisions,
+                              interaction_step=interaction_step)
+
+    def _update_particle_visualization(self):
+        """Обновляет визуализацию частиц без пересоздания системы"""
+        if hasattr(self, 'particle_circles'):
+            for c in self.particle_circles: 
+                c.remove()
+        
+        self.particle_circles = []
+        if self.system.pos is not None:
+            for i in range(self.system.n()):
+                circle = patches.Circle((self.system.pos[i, 0], self.system.pos[i, 1]),
+                                        radius=self.system.visual_radius, facecolor="#215a93",
+                                        edgecolor="black", linewidth=0.5, alpha=0.8)
+                self.ax_anim.add_patch(circle)
+                self.particle_circles.append(circle)
+        
+        self.canvas_anim.draw_idle()
+
+    def _init_simulation(self, N=10, radius=3, temp=5, dt=0.1,
                          vessel_kind="Прямоугольник", poly=None,
-                         potential_params=None, mass=1.0, enable_collisions=True, interaction_step=10):
+                         potential_params=None, mass=1.0, enable_collisions=True, interaction_step=1):
         if potential_params is None:
             potential_params = PotentialParams()
         if vessel_kind in ("rect", "Прямоугольник"):
-            vessel = Vessel(kind="Прямоугольник", rect=(-1, -1, 1, 1))
+            vessel = Vessel(kind="Прямоугольник", rect=(-100, -100, 100, 100))
         elif vessel_kind in ("circle", "Круг"):
-            vessel = Vessel(kind="Круг", circle=(0, 0, 1))
+            vessel = Vessel(kind="Круг", circle=(0, 0, 100))
         elif vessel_kind in ("poly", "Многоугольник"):
             if poly is None:
-                poly = np.array([[-0.8, -0.8], [0.8, -0.8], [0.0, 0.8]])
+                poly = np.array([[-80, -80], [80, -80], [0.0, 80]])
             vessel = Vessel(kind="Многоугольник", poly=poly)
         else:
-            vessel = Vessel(kind="Прямоугольник", rect=(-1, -1, 1, 1))
+            vessel = Vessel(kind="Прямоугольник", rect=(-100, -100, 100, 100))
         self.system = System(vessel=vessel, N=N, radius=radius, visual_radius=radius, temp=temp, dt=dt,
                              params=potential_params, mass=mass, enable_collisions=enable_collisions,
                              interaction_step=interaction_step)
@@ -1084,13 +1277,13 @@ class SimulationWidget(QtWidgets.QWidget):
         for i in range(self.system.n()):
             circle = patches.Circle((self.system.pos[i, 0], self.system.pos[i, 1]),
                                     radius=self.system.visual_radius, facecolor="#215a93",
-                                    edgecolor="black", linewidth=0.5, alpha=0.8)
+                                    edgecolor="black", linewidth=0.5)
             self.ax_anim.add_patch(circle)
             self.particle_circles.append(circle)
         self._draw_vessel_patch()
-        self.ax_anim.relim();
+        self.ax_anim.relim()
         self.ax_anim.autoscale_view()
-        self.canvas_anim.draw_idle();
+        self.canvas_anim.draw_idle()
         self.canvas_hist.draw_idle()
         self.running = True
         self._last_time = time.time()
@@ -1171,36 +1364,6 @@ class SimulationWidget(QtWidgets.QWidget):
 
         self.canvas_hist.draw_idle()
 
-    def _apply_settings(self):
-        N = int(self.spin_N.value())
-        radius = float(self.edit_R.value())
-        temp = float(self.edit_T.value())
-        dt = 0.002
-        mass = float(self.edit_m.value())
-        enable_collisions = self.check_collisions.isChecked()
-        interaction_step = int(self.spin_interact_step.value())
-        pot_params = PotentialParams(
-            kind=str(self.pot_box.currentText()),
-            epsilon=float(self.edit_eps.value()),
-            sigma=float(self.edit_sigma.value()),
-            De=float(self.edit_De.value()),
-            a=float(self.edit_a.value()),
-            r0=float(self.edit_r0.value()),
-        )
-        vessel_kind = str(self.vessel_box.currentText())
-        poly = self.system.vessel.poly if vessel_kind in ("poly", "Многоугольник") else None
-
-        # Сбрасываем накопленные данные при изменении параметров
-        self.accumulated_x = np.array([])
-        self.accumulated_y = np.array([])
-        self.accumulated_distances = np.array([])
-
-        self._init_simulation(N=N, radius=radius, temp=temp, dt=dt, vessel_kind=vessel_kind, poly=poly,
-                              potential_params=pot_params, mass=mass, enable_collisions=enable_collisions,
-                              interaction_step=interaction_step)
-        self._update_histograms()
-        self.update_language(self.get_lang_cb())
-
     def _toggle_run(self):
         lang = self.get_lang_cb()
         s = STRINGS[lang.value]
@@ -1208,26 +1371,33 @@ class SimulationWidget(QtWidgets.QWidget):
         self.btn_run.setText(s["sim.btn.pause"] if self.running else s["sim.btn.start"])
 
     def _toggle_settings(self):
-        lang = self.get_lang_cb();
+        lang = self.get_lang_cb()
         s = STRINGS[lang.value]
         if self.settings_panel.isVisible():
             self.settings_panel.hide()
-            self.btn_collapse.setText(s["sim.btn.expand"])
+            # self.btn_collapse.setText(s["sim.btn.expand"])
         else:
             self.settings_panel.show()
-            self.btn_collapse.setText(s["sim.btn.collapse"])
+            # self.btn_collapse.setText(s["sim.btn.collapse"])
 
     def _enter_draw_mode(self):
-        self.draw_mode = True
-        self.poly_points = []
+        vessel_kind = str(self.vessel_box.currentText())
+        if vessel_kind in ("poly", "Многоугольник"):
+            self.draw_mode = True
+            self.poly_points = []
 
     def _clear_poly(self):
-        self.system.vessel.poly = None
-        self._draw_vessel_patch()
-        self.canvas_anim.draw_idle()
+        vessel_kind = str(self.vessel_box.currentText())
+        if vessel_kind in ("poly", "Многоугольник"):
+            self.system.vessel.poly = None
+            self._draw_vessel_patch()
+            self.canvas_anim.draw_idle()
 
     def _on_mouse(self, event):
         if not self.draw_mode or event.inaxes != self.ax_anim: return
+        vessel_kind = str(self.vessel_box.currentText())
+        if vessel_kind not in ("poly", "Многоугольник"): return
+            
         if event.button == 1:
             self.poly_points.append((event.xdata, event.ydata))
             self._preview_poly()
@@ -1262,19 +1432,19 @@ class SimulationWidget(QtWidgets.QWidget):
         if v.kind in ("rect", "Прямоугольник"):
             xmin, ymin, xmax, ymax = v.rect
             self.vessel_artist = patches.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, lw=2, ec="#444")
-            self.ax_anim.set_xlim(xmin - 0.1, xmax + 0.1)
-            self.ax_anim.set_ylim(ymin - 0.1, ymax + 0.1)
+            self.ax_anim.set_xlim(xmin - 10, xmax + 10)
+            self.ax_anim.set_ylim(ymin - 10, ymax + 10)
         elif v.kind in ("circle", "Круг"):
             cx, cy, R = v.circle
             self.vessel_artist = patches.Circle((cx, cy), R, fill=False, lw=2, ec="#444")
-            self.ax_anim.set_xlim(cx - R - 0.1, cx + R + 0.1)
-            self.ax_anim.set_ylim(cy - R - 0.1, cy + R + 0.1)
+            self.ax_anim.set_xlim(cx - R - 10, cx + R + 10)
+            self.ax_anim.set_ylim(cy - R - 10, cy + R + 10)
         elif v.kind in ("poly", "Многоугольник") and v.poly is not None:
             self.vessel_artist = patches.Polygon(v.poly, closed=True, fill=False, lw=2, ec="#444")
-            xmin, ymin = v.poly.min(axis=0);
+            xmin, ymin = v.poly.min(axis=0)
             xmax, ymax = v.poly.max(axis=0)
-            self.ax_anim.set_xlim(xmin - 0.1, xmax + 0.1)
-            self.ax_anim.set_ylim(ymin - 0.1, ymax + 0.1)
+            self.ax_anim.set_xlim(xmin - 10, xmax + 10)
+            self.ax_anim.set_ylim(ymin - 10, ymax + 10)
         else:
             self.vessel_artist = None
         if self.vessel_artist is not None:
@@ -1289,49 +1459,49 @@ class SimulationWidget(QtWidgets.QWidget):
             w = self.findChild(QtWidgets.QLabel, obj_name)
             if w: w.setText(STRINGS[lang.value].get(text_key, ""))
 
-        set_lbl("lbl_N", "sim.N");
-        set_lbl("unit_N", "sim.N.unit");
+        set_lbl("lbl_N", "sim.N")
+        set_lbl("unit_N", "sim.N.unit")
         set_lbl("help_N", "sim.N.help")
-        set_lbl("lbl_R", "sim.R");
-        set_lbl("unit_R", "sim.R.unit");
+        set_lbl("lbl_R", "sim.R")
+        set_lbl("unit_R", "sim.R.unit")
         set_lbl("help_R", "sim.R.help")
-        set_lbl("lbl_T", "sim.T");
-        set_lbl("unit_T", "sim.T.unit");
+        set_lbl("lbl_T", "sim.T")
+        set_lbl("unit_T", "sim.T.unit")
         set_lbl("help_T", "sim.T.help")
-        set_lbl("lbl_m", "sim.m");
-        set_lbl("unit_m", "sim.m.unit");
+        set_lbl("lbl_m", "sim.m")
+        set_lbl("unit_m", "sim.m.unit")
         set_lbl("help_m", "sim.m.help")
         self.check_collisions.setText(s["sim.collisions"])
-        set_lbl("lbl_pot", "sim.pot");
+        set_lbl("lbl_pot", "sim.pot")
         set_lbl("help_pot", "sim.pot.help")
-        set_lbl("lbl_eps", "sim.eps");
-        set_lbl("unit_eps", "sim.eps.unit");
+        set_lbl("lbl_eps", "sim.eps")
+        set_lbl("unit_eps", "sim.eps.unit")
         set_lbl("help_eps", "sim.eps.help")
-        set_lbl("lbl_sigma", "sim.sigma");
-        set_lbl("unit_sigma", "sim.sigma.unit");
+        set_lbl("lbl_sigma", "sim.sigma")
+        set_lbl("unit_sigma", "sim.sigma.unit")
         set_lbl("help_sigma", "sim.sigma.help")
-        set_lbl("lbl_De", "sim.De");
-        set_lbl("unit_De", "sim.De.unit");
+        set_lbl("lbl_De", "sim.De")
+        set_lbl("unit_De", "sim.De.unit")
         set_lbl("help_De", "sim.De.help")
-        set_lbl("lbl_a", "sim.a");
-        set_lbl("unit_a", "sim.a.unit");
+        set_lbl("lbl_a", "sim.a")
+        set_lbl("unit_a", "sim.a.unit")
         set_lbl("help_a", "sim.a.help")
-        set_lbl("lbl_r0", "sim.r0");
-        set_lbl("unit_r0", "sim.r0.unit");
+        set_lbl("lbl_r0", "sim.r0")
+        set_lbl("unit_r0", "sim.r0.unit")
         set_lbl("help_r0", "sim.r0.help")
-        set_lbl("lbl_vessel", "sim.vessel");
+        set_lbl("lbl_vessel", "sim.vessel")
         set_lbl("help_vessel", "sim.vessel.help")
-        set_lbl("lbl_interact", "sim.interact");
+        set_lbl("lbl_interact", "sim.interact")
         set_lbl("unit_interact", "sim.interact.unit")
-        set_lbl("lbl_bins", "sim.bins");
+        set_lbl("lbl_bins", "sim.bins")
         set_lbl("help_bins", "sim.bins.help")
 
         self.btn_draw.setText(s["sim.btn.draw"])
         self.btn_clear.setText(s["sim.btn.clear"])
         self.btn_run.setText(s["sim.btn.pause"] if self.running else s["sim.btn.start"])
-        self.btn_apply.setText(s["sim.btn.apply"])
+        # self.btn_apply.setText(s["sim.btn.apply"])
         self.btn_back.setText(s["sim.btn.back"])
-        self.btn_collapse.setText(s["sim.btn.collapse"] if self.settings_panel.isVisible() else s["sim.btn.expand"])
+        # self.btn_collapse.setText(s["sim.btn.collapse"] if self.settings_panel.isVisible() else s["sim.btn.expand"])
         self.btn_toggle_settings_small.setText(s["sim.top.settings"])
         self.ax_anim.set_title(s["sim.anim.title"])
         self.canvas_anim.draw_idle()
@@ -1358,6 +1528,9 @@ class SimulationWidget(QtWidgets.QWidget):
             s["vessel.poly"]
         ])
         self.vessel_box.setCurrentIndex(current_vessel_index)
+        
+        # Обновляем состояние кнопок полигона после смены языка
+        self._update_polygon_buttons_state()
 
 
 class AuthorsWidget(QtWidgets.QWidget):
@@ -1426,7 +1599,7 @@ class AuthorsWidget(QtWidgets.QWidget):
 
         self.back_btn = QtWidgets.QPushButton()
         self.back_btn.setFixedSize(200, 48)  # ФИКСИРУЕМ РАЗМЕР
-        self.back_btn.setStyleSheet("background:#313132;color:white;font-weight:600;border-radius:6px;")
+        self.back_btn.setStyleSheet("background:#313132;color:white;font-weight:600;font-size:12pt;border-radius:6px;")
         self.back_btn.clicked.connect(self.back_cb)
         layout.addWidget(self.back_btn, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
         layout.addSpacing(20)
@@ -1518,8 +1691,12 @@ def main():
             app.setFont(font)
             break
 
+    logging.getLogger('matplotlib').setLevel(logging.WARNING)
+    logging.getLogger('matplotlib.font_manager').disabled = True
+
     plt.rcParams['font.family'] = ['Microsoft YaHei', 'SimHei', 'Noto Sans CJK SC', 'DejaVu Sans']
     plt.rcParams['axes.unicode_minus'] = False  # Важно для правильного отображения минуса
+    matplotlib.use('Agg')
 
     w = MainWindow()
     w.show()
