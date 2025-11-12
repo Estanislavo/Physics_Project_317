@@ -1365,6 +1365,16 @@ class SimulationWidget(QtWidgets.QWidget):
         self.ax_histd.set_xlabel("r")
         self.ax_histd.set_title(s["sim.hist.r"], fontsize=10, fontweight='bold')
 
+        # ДОБАВЛЯЕМ ЭТИ СТРОКИ ДЛЯ УВЕЛИЧЕНИЯ РАССТОЯНИЯ МЕЖДУ ГРАФИКАМИ
+        self.fig_hist.subplots_adjust(
+            left=0.12,  # увеличиваем левый отступ
+            right=0.95,  # уменьшаем правый отступ
+            bottom=0.08,  # увеличиваем нижний отступ
+            top=0.95,  # уменьшаем верхний отступ
+            hspace=0.5,  # УВЕЛИЧИВАЕМ расстояние между subplots по вертикали
+            wspace=0.2  # расстояние между subplots по горизонтали
+        )
+
         self.canvas_hist.draw_idle()
 
     def _compute_quick_distances_sample(self, sample_size):
