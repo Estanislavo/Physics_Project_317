@@ -100,6 +100,16 @@ STRINGS = {
         "sim.hist.y": "Распределение Y",
         "sim.hist.r": "Распределение расстояний",
 
+        "sim.btn.select_particles": "Выбор частиц",
+        "sim.btn.cancel_selection": "Отменить выбор",
+
+        "sim.histograms.title": "Гистограммы",
+        "sim.display_mode.distance": "Обычное расстояние",
+        "sim.display_mode.projections": "Проекции на оси", 
+        "sim.display_mode.signed": "Расстояние со знаком",
+        "sim.btn.reset_data": "Сбросить данные",
+        "sim.btn.reset_data.tooltip": "Очистить все накопленные данные гистограмм",
+
         "menu.authors": "Об авторах",
         "authors.title": "Команда разработчиков",
         "authors.name1": "Енягин Станислав",
@@ -172,6 +182,16 @@ STRINGS = {
         "sim.hist.x": "Distribution of X",
         "sim.hist.y": "Distribution of Y",
         "sim.hist.r": "Distribution of pair distances",
+
+        "sim.btn.select_particles": "Select particles",
+        "sim.btn.cancel_selection": "Cancel selection",
+
+        "sim.histograms.title": "Histograms",
+        "sim.display_mode.distance": "Regular distance",
+        "sim.display_mode.projections": "Projections",
+        "sim.display_mode.signed": "Signed distance",
+        "sim.btn.reset_data": "Reset Data",
+        "sim.btn.reset_data.tooltip": "Clear all accumulated histogram data",
 
         "menu.authors": "Authors",
         "authors.title": "Development Team",
@@ -246,6 +266,16 @@ STRINGS = {
         "sim.hist.x": "X分布",
         "sim.hist.y": "Y分布",
         "sim.hist.r": "距离分布",
+
+        "sim.btn.select_particles": "选择粒子",
+        "sim.btn.cancel_selection": "取消选择",
+
+        "sim.histograms.title": "直方图",
+        "sim.display_mode.distance": "常规距离",
+        "sim.display_mode.projections": "投影", 
+        "sim.display_mode.signed": "带符号距离",
+        "sim.btn.reset_data": "重置数据",
+        "sim.btn.reset_data.tooltip": "清除所有累积的直方图数据",
 
         "menu.authors": "关于作者",
         "authors.title": "开发团队",
@@ -949,20 +979,36 @@ class SimulationWidget(QtWidgets.QWidget):
         self.accumulated_x = np.array([])
         self.accumulated_y = np.array([])
         self.accumulated_distances = np.array([])
-        self.max_accumulated_points = 100000  # Максимальное количество точек для предотвращения переполнения
+        self.max_accumulated_points = 100000
+
+        self.selected_particles = []
+        self.distance_line = None
+        self.particle_selection_mode = False
+        self.selected_particles_data = {
+            'x': np.array([]),
+            'y': np.array([]),
+            'distances': np.array([]),
+            'dx': np.array([]),  # проекция X
+            'dy': np.array([]),  # проекция Y
+            'signed_distance': np.array([])  # расстояние со знаком
+        }
+        
+        # Новый режим отображения графиков
+        self.distance_display_mode = 0  # 0 - обычное расстояние, 1 - проекции, 2 - расстояние со знаком
 
         self.back_cb = back_cb
         self.get_lang_cb = get_lang_cb
-        self.bins_count = 36  # Значение по умолчанию
+        self.bins_count = 36
         self._build_ui()
         self._init_simulation()
         self._start_timer()
         self.update_language(self.get_lang_cb())
+        self._reset_data()
 
     def _build_ui(self):
         main_l = QtWidgets.QHBoxLayout(self)
         self.settings_panel = QtWidgets.QWidget()
-        self.settings_panel.setFixedWidth(300)  # УВЕЛИЧИЛИ ШИРИНУ для больших шрифтов
+        self.settings_panel.setFixedWidth(300)
         self.settings_panel.setStyleSheet("background:#f7f7f8;")
         sp_layout = QtWidgets.QVBoxLayout(self.settings_panel)
         sp_layout.setContentsMargins(12, 12, 12, 12)
@@ -998,7 +1044,7 @@ class SimulationWidget(QtWidgets.QWidget):
         self.spin_N = QtWidgets.QSpinBox()
         self.spin_N.setRange(5, 100)  # УВЕЛИЧИЛИ ДИАПАЗОН
         self.spin_N.setValue(10)
-        self.spin_N.setFixedHeight(25)
+        self.spin_N.setFixedHeight(22)
         self.spin_N.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("N", self.spin_N, "sim.N.unit", "sim.N.help")
 
@@ -1007,7 +1053,7 @@ class SimulationWidget(QtWidgets.QWidget):
         self.edit_R.setSingleStep(0.1)
         self.edit_R.setDecimals(1)
         self.edit_R.setValue(3.0)
-        self.edit_R.setFixedHeight(25)
+        self.edit_R.setFixedHeight(22)
         self.edit_R.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("R", self.edit_R, "sim.R.unit", "sim.R.help")
 
@@ -1015,7 +1061,7 @@ class SimulationWidget(QtWidgets.QWidget):
         self.edit_T.setRange(0.1, 50.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
         self.edit_T.setSingleStep(0.5)
         self.edit_T.setValue(5)
-        self.edit_T.setFixedHeight(25)
+        self.edit_T.setFixedHeight(22)
         self.edit_T.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("T", self.edit_T, "sim.T.unit", "sim.T.help")
 
@@ -1023,7 +1069,7 @@ class SimulationWidget(QtWidgets.QWidget):
         self.edit_m.setRange(0.01, 100.0)
         self.edit_m.setSingleStep(0.1)
         self.edit_m.setValue(1.0)
-        self.edit_m.setFixedHeight(25)
+        self.edit_m.setFixedHeight(22)
         self.edit_m.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("m", self.edit_m, "sim.m.unit", "sim.m.help")
 
@@ -1041,49 +1087,49 @@ class SimulationWidget(QtWidgets.QWidget):
         self.edit_eps = QtWidgets.QDoubleSpinBox()
         self.edit_eps.setRange(0.0, 100.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
         self.edit_eps.setValue(10.0)
-        self.edit_eps.setFixedHeight(25)
+        self.edit_eps.setFixedHeight(22)
         self.edit_eps.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("eps", self.edit_eps, "sim.eps.unit", "sim.eps.help")
 
         self.edit_sigma = QtWidgets.QDoubleSpinBox()
         self.edit_sigma.setRange(1.0, 30.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
         self.edit_sigma.setValue(15.0)
-        self.edit_sigma.setFixedHeight(25)
+        self.edit_sigma.setFixedHeight(22)
         self.edit_sigma.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("sigma", self.edit_sigma, "sim.sigma.unit", "sim.sigma.help")
 
         self.edit_De = QtWidgets.QDoubleSpinBox()
         self.edit_De.setRange(0.0, 100.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
         self.edit_De.setValue(20.0)
-        self.edit_De.setFixedHeight(25)
+        self.edit_De.setFixedHeight(22)
         self.edit_De.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("De", self.edit_De, "sim.De.unit", "sim.De.help")
 
         self.edit_a = QtWidgets.QDoubleSpinBox()
         self.edit_a.setRange(0.01, 5.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
         self.edit_a.setValue(0.5)
-        self.edit_a.setFixedHeight(25)
+        self.edit_a.setFixedHeight(22)
         self.edit_a.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("a", self.edit_a, "sim.a.unit", "sim.a.help")
 
         self.edit_r0 = QtWidgets.QDoubleSpinBox()
         self.edit_r0.setRange(1.0, 20.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
         self.edit_r0.setValue(2.5)
-        self.edit_r0.setFixedHeight(25)
+        self.edit_r0.setFixedHeight(22)
         self.edit_r0.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("r0", self.edit_r0, "sim.r0.unit", "sim.r0.help")
 
         self.vessel_box = QtWidgets.QComboBox()
         self.vessel_box.addItems(["Прямоугольник", "Круг", "Многоугольник"])
         self.vessel_box.currentIndexChanged.connect(self._on_vessel_changed)  # ОСОБАЯ ОБРАБОТКА
-        self.vessel_box.setFixedHeight(25)
+        self.vessel_box.setFixedHeight(22)
         self.vessel_box.setStyleSheet("font-size:12pt;color: black;")  # УВЕЛИЧИЛИ ШРИФТ
         add_row("vessel", self.vessel_box, "", "sim.vessel.help")
 
         self.spin_interact_step = QtWidgets.QSpinBox()
         self.spin_interact_step.setRange(1, 1000)
         self.spin_interact_step.setValue(1)
-        self.spin_interact_step.setFixedHeight(25)
+        self.spin_interact_step.setFixedHeight(22)
         self.spin_interact_step.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         # add_row("interact", self.spin_interact_step, "sim.interact.unit", "")
 
@@ -1091,32 +1137,49 @@ class SimulationWidget(QtWidgets.QWidget):
         self.spin_bins = QtWidgets.QSpinBox()
         self.spin_bins.setRange(5, 100)
         self.spin_bins.setValue(self.bins_count)
-        self.spin_bins.setFixedHeight(25)
+        self.spin_bins.setFixedHeight(22)
         self.spin_bins.valueChanged.connect(self._on_bins_changed)
         add_row("bins", self.spin_bins, "", "sim.bins.help")
 
         sp_layout.addSpacing(12)
         self.btn_draw = QtWidgets.QPushButton()
         self.btn_draw.clicked.connect(self._enter_draw_mode)
-        self.btn_draw.setFixedHeight(25)  # УВЕЛИЧИЛИ ВЫСОТУ
+        self.btn_draw.setFixedHeight(22)  # УВЕЛИЧИЛИ ВЫСОТУ
         self.btn_draw.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
         sp_layout.addWidget(self.btn_draw)
 
         self.btn_clear = QtWidgets.QPushButton()
         self.btn_clear.clicked.connect(self._clear_poly)
-        self.btn_clear.setFixedHeight(25)  # УВЕЛИЧИЛИ ВЫСОТУ
+        self.btn_clear.setFixedHeight(22)  # УВЕЛИЧИЛИ ВЫСОТУ
         self.btn_clear.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
         sp_layout.addWidget(self.btn_clear)
 
+        # self.btn_show_distance = QtWidgets.QPushButton()
+        # self.btn_show_distance.clicked.connect(self._toggle_distance_display)
+        # self.btn_show_distance.setFixedHeight(22)
+        # self.btn_show_distance.setStyleSheet("font-size:11pt;")
+        # sp_layout.addWidget(self.btn_show_distance)
+
+        self.btn_particle_select = QtWidgets.QPushButton()
+        self.btn_particle_select.clicked.connect(self._toggle_particle_selection)
+        self.btn_particle_select.setFixedHeight(22)
+        self.btn_particle_select.setStyleSheet("font-size:11pt;")
+        sp_layout.addWidget(self.btn_particle_select)
+
         self.btn_run = QtWidgets.QPushButton()
         self.btn_run.clicked.connect(self._toggle_run)
-        self.btn_run.setFixedHeight(25)  # УВЕЛИЧИЛИ ВЫСОТУ
+        self.btn_run.setFixedHeight(22)  # УВЕЛИЧИЛИ ВЫСОТУ
         self.btn_run.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
         sp_layout.addWidget(self.btn_run)
 
+        self.btn_reset_data = QtWidgets.QPushButton()
+        self.btn_reset_data.clicked.connect(self._reset_data)
+        self.btn_reset_data.setFixedHeight(22)
+        sp_layout.addWidget(self.btn_reset_data)
+
         self.btn_back = QtWidgets.QPushButton()
         self.btn_back.clicked.connect(self.back_cb)
-        self.btn_back.setFixedHeight(25)  # УВЕЛИЧИЛИ ВЫСОТУ
+        self.btn_back.setFixedHeight(22)  # УВЕЛИЧИЛИ ВЫСОТУ
         self.btn_back.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
         sp_layout.addStretch(1)
         sp_layout.addWidget(self.btn_back)
@@ -1131,10 +1194,11 @@ class SimulationWidget(QtWidgets.QWidget):
         hist_container = QtWidgets.QVBoxLayout()
         canvas_container.addLayout(hist_container, stretch=1)
 
+        # Верхняя панель для анимации
         top_bar = QtWidgets.QHBoxLayout()
         self.btn_toggle_settings_small = QtWidgets.QPushButton()
-        self.btn_toggle_settings_small.setFixedSize(110, 28)  # УВЕЛИЧИЛИ РАЗМЕР
-        self.btn_toggle_settings_small.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
+        self.btn_toggle_settings_small.setFixedSize(110, 28)
+        self.btn_toggle_settings_small.setStyleSheet("font-size:12pt;")
         self.btn_toggle_settings_small.clicked.connect(self._toggle_settings)
         top_bar.addWidget(self.btn_toggle_settings_small, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
         top_bar.addStretch(1)
@@ -1146,27 +1210,184 @@ class SimulationWidget(QtWidgets.QWidget):
         self.ax_anim.set_yticks([])
         self.ax_anim.set_aspect('equal')
         self.canvas_anim = FigureCanvas(self.fig_anim)
-        self.canvas_anim.setMinimumSize(600, 600)  # ФИКСИРУЕМ МИНИМАЛЬНЫЙ РАЗМЕР
+        self.canvas_anim.setMinimumSize(600, 600)
         anim_container.addWidget(self.canvas_anim)
         self.canvas_anim.mpl_connect("button_press_event", self._on_mouse)
 
-        self.fig_hist, axes = plt.subplots(3, 1, figsize=(10, 10))
+        # Верхняя панель для гистограмм с кнопкой переключения режима
+        hist_top_bar = QtWidgets.QHBoxLayout()
+        
+        # Заголовок гистограмм
+        hist_title = QtWidgets.QLabel("Гистограммы")
+        hist_title.setStyleSheet("font-size:14pt; font-weight:bold;")
+        hist_top_bar.addWidget(hist_title)
+        
+        hist_top_bar.addStretch(1)
+        
+        # Кнопка переключения режима графика (теперь рядом с графиком)
+        self.btn_switch_display_mode = QtWidgets.QPushButton()
+        self.btn_switch_display_mode.clicked.connect(self._switch_display_mode)
+        self.btn_switch_display_mode.setFixedSize(180, 28)
+        self.btn_switch_display_mode.setStyleSheet("""
+            QPushButton {
+                font-size:11pt; 
+                background: #ab9d98; 
+                color: white; 
+                border: none; 
+                border-radius: 4px;
+                padding: 4px 8px;
+            }
+            QPushButton:hover {
+                background: #a8897e;
+            }
+            QPushButton:pressed {
+                background: #ab897d;
+            }
+        """)
+        hist_top_bar.addWidget(self.btn_switch_display_mode, alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+        
+        hist_container.addLayout(hist_top_bar)
+
+        self.fig_hist, axes = plt.subplots(3, 1, figsize=(5, 8))
         for ax in axes:
             ax.tick_params(labelsize=9)
         self.ax_histx, self.ax_histy, self.ax_histd = axes
         self.fig_hist.tight_layout()
         self.canvas_hist = FigureCanvas(self.fig_hist)
-        self.canvas_hist.setMinimumSize(400, 600)  # ФИКСИРУЕМ МИНИМАЛЬНЫЙ РАЗМЕР
+        self.canvas_hist.setMinimumSize(400, 600)
         hist_container.addWidget(self.canvas_hist)
 
         self.draw_mode = False
         self.poly_points = []
 
-        # Изначально обновляем состояние кнопок полигона
+        # Изначально обновляем состояние кнопок
         self._update_polygon_buttons_state()
+        self._update_display_mode_button()
+
+    def _update_reset_buttons(self):
+        """Обновление текста кнопок сброса"""
+        lang = self.get_lang_cb()
+        s = STRINGS[lang.value]
+        
+        self.btn_reset_data.setText(s.get("sim.btn.reset_data", "Сбросить данные"))
+        
+        # Добавляем всплывающие подсказки
+        self.btn_reset_data.setToolTip(s.get("sim.btn.reset_data.tooltip", "Очистить все накопленные данные гистограмм"))
+    
+    def _reset_data(self):
+        """Сброс всех накопленных данных"""
+        # Сбрасываем накопленные данные для всех частиц
+        self.accumulated_x = np.array([])
+        self.accumulated_y = np.array([])
+        self.accumulated_distances = np.array([])
+        self.accumulated_dx = np.array([])
+        self.accumulated_dy = np.array([])
+        self.accumulated_signed = np.array([])
+
+        # Сбрасываем данные для выбранных частиц (полная инициализация всех ключей)
+        self.selected_particles_data = {
+            'x': np.array([]),
+            'y': np.array([]),
+            'distances': np.array([]),
+            'dx': np.array([]),
+            'dy': np.array([]),
+            'signed_distance': np.array([])
+        }
+
+        # Очищаем выбор частиц
+        self.selected_particles = []
+        
+        # Удаляем линию расстояния
+        if self.distance_line:
+            self.distance_line.remove()
+            self.distance_line = None
+
+        # Перерисовываем частицы (убираем подсветку)
+        self._redraw_particles()
+        
+        # Обновляем гистограммы
+        self._update_histograms()
 
     def _on_bins_changed(self, value):
         self.bins_count = value
+        self._update_histograms()
+
+    def _switch_display_mode(self):
+        """Переключение режима отображения графиков расстояния"""
+        self.distance_display_mode = (self.distance_display_mode + 1) % 3
+        self._update_display_mode_button()
+        self._update_histograms()
+
+    def _update_display_mode_button(self):
+        """Обновление текста кнопки переключения режима"""
+        lang = self.get_lang_cb()
+        s = STRINGS[lang.value]
+        
+        if self.distance_display_mode == 0:
+            self.btn_switch_display_mode.setText("Обычное расстояние")
+            self.btn_switch_display_mode.setToolTip("Показать обычное евклидово расстояние между частицами")
+        elif self.distance_display_mode == 1:
+            self.btn_switch_display_mode.setText("Проекции X/Y")
+            self.btn_switch_display_mode.setToolTip("Показать проекции расстояния по осям X и Y")
+        else:  # mode 2
+            self.btn_switch_display_mode.setText("Расстояние со знаком")
+            self.btn_switch_display_mode.setToolTip("Показать ориентированное расстояние со знаком")
+
+    def _toggle_distance_display(self):
+        """Включение/выключение режима показа расстояния между частицами"""
+        self.show_distance = not self.show_distance
+        lang = self.get_lang_cb()
+        s = STRINGS[lang.value]
+        
+        if self.show_distance:
+            self.btn_show_distance.setText(s.get("sim.btn.hide_distance", "Скрыть расстояние"))
+            # Очищаем предыдущий выбор
+            self.selected_particles = []
+        else:
+            self.btn_show_distance.setText(s.get("sim.btn.show_distance", "Показать расстояние"))
+            # Удаляем линию расстояния
+            if self.distance_line:
+                self.distance_line.remove()
+                self.distance_line = None
+            self.selected_particles = []
+        
+        self.canvas_anim.draw_idle()
+
+    def _toggle_particle_selection(self):
+        """Включение/выключение режима выбора частиц"""
+        self.particle_selection_mode = not self.particle_selection_mode
+        lang = self.get_lang_cb()
+        s = STRINGS[lang.value]
+        
+        if self.particle_selection_mode:
+            self.btn_particle_select.setText(s.get("sim.btn.cancel_selection", "Отменить выбор"))
+            # Очищаем предыдущие данные
+            self.selected_particles_data = {
+                'x': np.array([]),
+                'y': np.array([]),
+                'distances': np.array([]),
+                'dx': np.array([]),
+                'dy': np.array([]),
+                'signed_distance': np.array([])
+            }
+        else:
+            self.btn_particle_select.setText(s.get("sim.btn.select_particles", "Выбор частиц"))
+            # Очищаем выбор и удаляем линию
+            self.selected_particles = []
+            if self.distance_line:
+                self.distance_line.remove()
+                self.distance_line = None
+            # Очищаем данные выбранных частиц
+            self.selected_particles_data = {
+                'x': np.array([]),
+                'y': np.array([]),
+                'distances': np.array([]),
+                'dx': np.array([]),
+                'dy': np.array([]),
+                'signed_distance': np.array([])
+            }
+        
+        self._redraw_particles()
         self._update_histograms()
 
     def _on_settings_changed(self):
@@ -1244,13 +1465,112 @@ class SimulationWidget(QtWidgets.QWidget):
         poly = self.system.vessel.poly if vessel_kind in ("poly", "Многоугольник") else None
 
         # Сбрасываем накопленные данные при изменении параметров
-        self.accumulated_x = np.array([])
-        self.accumulated_y = np.array([])
-        self.accumulated_distances = np.array([])
+        self._reset_data()
 
         self._init_simulation(N=N, radius=radius, temp=temp, dt=dt, vessel_kind=vessel_kind, poly=poly,
                               potential_params=pot_params, mass=mass, enable_collisions=enable_collisions,
                               interaction_step=interaction_step)
+
+    def _update_selected_particles_histograms(self):
+        """Обновление гистограмм только для выбранных частиц"""
+        if self.system.pos is None or len(self.selected_particles) == 0:
+            return
+
+        # Собираем данные выбранных частиц
+        selected_x = []
+        selected_y = []
+        
+        for idx in self.selected_particles:
+            if idx < len(self.system.pos):
+                selected_x.append(self.system.pos[idx, 0])
+                selected_y.append(self.system.pos[idx, 1])
+                # Накопление данных для выбранных частиц
+                self.selected_particles_data['x'] = np.append(self.selected_particles_data['x'], self.system.pos[idx, 0])
+                self.selected_particles_data['y'] = np.append(self.selected_particles_data['y'], self.system.pos[idx, 1])
+
+        # Добавляем расстояние между выбранными частицами и проекции
+        if len(self.selected_particles) == 2:
+            pos1 = self.system.pos[self.selected_particles[0]]
+            pos2 = self.system.pos[self.selected_particles[1]]
+            
+            # Обычное расстояние
+            distance = np.linalg.norm(pos1 - pos2)
+            self.selected_particles_data['distances'] = np.append(self.selected_particles_data['distances'], distance)
+            
+            # Проекции
+            dx = pos2[0] - pos1[0]  # проекция на X
+            dy = pos2[1] - pos1[1]  # проекция на Y
+            self.selected_particles_data['dx'] = np.append(self.selected_particles_data['dx'], dx)
+            self.selected_particles_data['dy'] = np.append(self.selected_particles_data['dy'], dy)
+            
+            # Расстояние со знаком (ориентированное расстояние)
+            # Определяем направление от первой частицы ко второй
+            angle = np.arctan2(dy, dx)
+            signed_distance = distance * np.sign(np.cos(angle))  # знак зависит от направления по X
+            self.selected_particles_data['signed_distance'] = np.append(
+                self.selected_particles_data['signed_distance'], signed_distance
+            )
+
+        # Ограничиваем размер массивов
+        max_points = 1000
+        for key in self.selected_particles_data:
+            if len(self.selected_particles_data[key]) > max_points:
+                self.selected_particles_data[key] = self.selected_particles_data[key][-max_points:]
+
+        # Строим гистограммы для выбранных частиц в зависимости от режима
+        lang = self.get_lang_cb()
+        s = STRINGS[lang.value]
+
+        if len(self.selected_particles_data['x']) > 0:
+            self.ax_histx.hist(self.selected_particles_data['x'], bins=self.bins_count, density=True, 
+                              color="#8bb7d7", alpha=0.8)
+        self.ax_histx.set_ylabel("p(x)", labelpad=5, fontsize=12)
+        self.ax_histx.set_title(f"{s['sim.hist.x']} (выбранные)", fontsize=12, fontweight='bold')
+
+        if len(self.selected_particles_data['y']) > 0:
+            self.ax_histy.hist(self.selected_particles_data['y'], bins=self.bins_count, density=True, 
+                              color="#f9ad6c", alpha=0.8)
+        self.ax_histy.set_ylabel("p(y)", labelpad=5, fontsize=12)
+        self.ax_histy.set_title(f"{s['sim.hist.y']} (выбранные)", fontsize=12, fontweight='bold')
+
+        # Разные режимы отображения для третьего графика
+        if self.distance_display_mode == 0:  # Обычное расстояние
+            if len(self.selected_particles_data['distances']) > 0:
+                self.ax_histd.hist(self.selected_particles_data['distances'], bins=self.bins_count, density=True, 
+                                  color="#8dd38d", alpha=0.85)
+            self.ax_histd.set_ylabel("p(r)", labelpad=5, fontsize=12)
+            self.ax_histd.set_xlabel("r", fontsize=12)
+            self.ax_histd.set_title(f"{s['sim.hist.r']} (выбранные)", fontsize=12, fontweight='bold')
+            
+        elif self.distance_display_mode == 1:  # Проекции
+            # Показываем проекции dx и dy на одном графике
+            has_dx = len(self.selected_particles_data['dx']) > 0
+            has_dy = len(self.selected_particles_data['dy']) > 0
+            
+            if has_dx:
+                self.ax_histd.hist(self.selected_particles_data['dx'], bins=self.bins_count, density=True, 
+                                  color="#8dd38d", alpha=0.6, label="Δx")
+            if has_dy:
+                self.ax_histd.hist(self.selected_particles_data['dy'], bins=self.bins_count, density=True, 
+                                  color="#8bb7d7", alpha=0.6, label="Δy")
+            
+            self.ax_histd.set_ylabel("p(Δ)", labelpad=5, fontsize=12)
+            self.ax_histd.set_xlabel("Δ", fontsize=12)
+            self.ax_histd.set_title("Проекции расстояния (выбранные)", fontsize=12, fontweight='bold')
+            
+            # Добавляем легенду только если есть данные
+            if has_dx or has_dy:
+                self.ax_histd.legend()
+            
+        else:  # Расстояние со знаком
+            if len(self.selected_particles_data['signed_distance']) > 0:
+                self.ax_histd.hist(self.selected_particles_data['signed_distance'], bins=self.bins_count, density=True, 
+                                  color="#8d6e63", alpha=0.85)
+            self.ax_histd.set_ylabel("p(rₛ)", labelpad=5, fontsize=12)
+            self.ax_histd.set_xlabel("rₛ (со знаком)", fontsize=12)
+            self.ax_histd.set_title("Расстояние со знаком (выбранные)", fontsize=12, fontweight='bold')
+            # Добавляем вертикальную линию в нуле
+            self.ax_histd.axvline(x=0, color='red', linestyle='--', alpha=0.7)
 
     def _update_particle_visualization(self):
         """Обновляет визуализацию частиц без пересоздания системы"""
@@ -1325,29 +1645,33 @@ class SimulationWidget(QtWidgets.QWidget):
                 self._update_histograms()
                 self._last_hist_update = current_time
 
+    
     def _redraw_particles(self):
         if hasattr(self, 'particle_circles') and self.system.pos is not None:
             for i, circle in enumerate(self.particle_circles):
                 circle.center = (self.system.pos[i, 0], self.system.pos[i, 1])
+                
+                # Подсвечиваем выбранные частицы (всегда, если они выбраны)
+                if i in self.selected_particles:
+                    circle.set_facecolor("#ff4444")  # Красный для выбранных
+                    circle.set_edgecolor("darkred")
+                    circle.set_linewidth(2)
+                else:
+                    circle.set_facecolor("#215a93")  # Синий для остальных
+                    circle.set_edgecolor("black")
+                    circle.set_linewidth(0.5)
+            
+            # Обновляем линию расстояния
+            if self.particle_selection_mode and len(self.selected_particles) == 2:
+                self._update_distance_display()
+            
             current_time = time.time()
             if current_time - self._last_canvas_update > 0.033:
                 self.canvas_anim.draw_idle()
                 self._last_canvas_update = current_time
 
     def _update_histograms(self):
-        # Оптимизированное вычисление гистограмм БЕЗ полного pairwise_distances_fast
-        current_x = self.system.pos[:, 0]
-        current_y = self.system.pos[:, 1]
-
-        # ВЫЧИСЛЯЕМ РАССТОЯНИЯ ТОЛЬКО ДЛЯ ВЫБОРКИ (быстрый метод)
-        current_dists = self._compute_quick_distances_sample(500)  # всего 500 расстояний вместо 5000
-
-        # Накопление данных с ограничением
-        self.accumulated_x = self._accumulate_with_limit(self.accumulated_x, current_x)
-        self.accumulated_y = self._accumulate_with_limit(self.accumulated_y, current_y)
-        if current_dists.size > 0:
-            self.accumulated_distances = self._accumulate_with_limit(self.accumulated_distances, current_dists)
-
+        """Обновление гистограмм с учетом выбранных частиц"""
         # Очищаем графики
         for ax in (self.ax_histx, self.ax_histy, self.ax_histd):
             ax.cla()
@@ -1358,37 +1682,255 @@ class SimulationWidget(QtWidgets.QWidget):
         lang = self.get_lang_cb()
         s = STRINGS[lang.value]
 
+        # Если в режиме выбора и есть выбранные частицы, показываем только их данные
+        if self.particle_selection_mode and len(self.selected_particles) > 0:
+            self._update_selected_particles_histograms()
+        else:
+            # Обычные гистограммы для всех частиц
+            self._update_all_particles_histograms()
+
+        self.canvas_hist.draw_idle()
+
+    def _update_selected_particles_histograms(self):
+        """Обновление гистограмм только для выбранных частиц"""
+        if self.system.pos is None or len(self.selected_particles) == 0:
+            return
+
+        # Собираем данные выбранных частиц
+        selected_x = []
+        selected_y = []
+        
+        for idx in self.selected_particles:
+            if idx < len(self.system.pos):
+                selected_x.append(self.system.pos[idx, 0])
+                selected_y.append(self.system.pos[idx, 1])
+                # Накопление данных для выбранных частиц
+                self.selected_particles_data['x'] = np.append(self.selected_particles_data['x'], self.system.pos[idx, 0])
+                self.selected_particles_data['y'] = np.append(self.selected_particles_data['y'], self.system.pos[idx, 1])
+
+        # Добавляем расстояние между выбранными частицами и проекции
+        if len(self.selected_particles) == 2:
+            pos1 = self.system.pos[self.selected_particles[0]]
+            pos2 = self.system.pos[self.selected_particles[1]]
+            
+            # Обычное расстояние
+            distance = np.linalg.norm(pos1 - pos2)
+            self.selected_particles_data['distances'] = np.append(self.selected_particles_data['distances'], distance)
+            
+            # Проекции
+            dx = pos2[0] - pos1[0]  # проекция на X
+            dy = pos2[1] - pos1[1]  # проекция на Y
+            self.selected_particles_data['dx'] = np.append(self.selected_particles_data['dx'], dx)
+            self.selected_particles_data['dy'] = np.append(self.selected_particles_data['dy'], dy)
+            
+            # Расстояние со знаком (ориентированное расстояние)
+            # Определяем направление от первой частицы ко второй
+            angle = np.arctan2(dy, dx)
+            signed_distance = distance * np.sign(np.cos(angle))  # знак зависит от направления по X
+            self.selected_particles_data['signed_distance'] = np.append(
+                self.selected_particles_data['signed_distance'], signed_distance
+            )
+
+        # Ограничиваем размер массивов
+        max_points = 1000
+        for key in self.selected_particles_data:
+            if len(self.selected_particles_data[key]) > max_points:
+                self.selected_particles_data[key] = self.selected_particles_data[key][-max_points:]
+
+        # Строим гистограммы для выбранных частиц в зависимости от режима
+        lang = self.get_lang_cb()
+        s = STRINGS[lang.value]
+
+        if len(self.selected_particles_data['x']) > 0:
+            self.ax_histx.hist(self.selected_particles_data['x'], bins=self.bins_count, density=True, 
+                              color="#8bb7d7", alpha=0.8)
+        self.ax_histx.set_ylabel("p(x)", labelpad=5, fontsize=12)
+        self.ax_histx.set_title(f"{s['sim.hist.x']} (выбранные)", fontweight='bold')
+
+        if len(self.selected_particles_data['y']) > 0:
+            self.ax_histy.hist(self.selected_particles_data['y'], bins=self.bins_count, density=True, 
+                              color="#f9ad6c", alpha=0.8)
+        self.ax_histy.set_ylabel("p(y)", labelpad=5, fontsize=12)
+        self.ax_histy.set_title(f"{s['sim.hist.y']} (выбранные)", fontweight='bold')
+
+        # Разные режимы отображения для третьего графика
+        if self.distance_display_mode == 0:  # Обычное расстояние
+            if len(self.selected_particles_data['distances']) > 0:
+                self.ax_histd.hist(self.selected_particles_data['distances'], bins=self.bins_count, density=True, 
+                                  color="#8dd38d", alpha=0.85)
+            self.ax_histd.set_ylabel("p(r)", labelpad=5, fontsize=12)
+            self.ax_histd.set_xlabel("r", fontsize=12)
+            self.ax_histd.set_title(f"{s['sim.hist.r']}", fontweight='bold')
+            
+        elif self.distance_display_mode == 1:  # Проекции
+            # Показываем проекции dx и dy на одном графике
+            if len(self.selected_particles_data['dx']) > 0:
+                self.ax_histd.hist(self.selected_particles_data['dx'], bins=self.bins_count, density=True, 
+                                  color="#8dd38d", alpha=0.6, label="Δx")
+            if len(self.selected_particles_data['dy']) > 0:
+                self.ax_histd.hist(self.selected_particles_data['dy'], bins=self.bins_count, density=True, 
+                                  color="#8bb7d7", alpha=0.6, label="Δy")
+            self.ax_histd.set_ylabel("p(Δ)", labelpad=5, fontsize=12)
+            self.ax_histd.set_xlabel("Δ", fontsize=12)
+            self.ax_histd.set_title("Проекции расстояния", fontweight='bold')
+            self.ax_histd.legend()
+            
+        else:  # Расстояние со знаком
+            if len(self.selected_particles_data['signed_distance']) > 0:
+                self.ax_histd.hist(self.selected_particles_data['signed_distance'], bins=self.bins_count, density=True, 
+                                  color="#8d6e63", alpha=0.85)
+            self.ax_histd.set_ylabel("p(rₛ)", labelpad=5, fontsize=12)
+            self.ax_histd.set_xlabel("rₛ (со знаком)", fontsize=12)
+            self.ax_histd.set_title("Расстояние со знаком", fontweight='bold')
+            # Добавляем вертикальную линию в нуле
+            self.ax_histd.axvline(x=0, color='red', linestyle='--', alpha=0.7)
+
+    def _update_all_particles_histograms(self):
+        """Обновление гистограмм для всех частиц"""
+        # Накопление данных о текущих позициях
+        current_x = self.system.pos[:, 0]
+        current_y = self.system.pos[:, 1]
+        
+        # Вычисляем разные типы расстояний в зависимости от режима
+        if self.distance_display_mode == 0:  # Обычное расстояние
+            current_dists = self.system.pairwise_distances_fast(max_pairs=5000)
+            if current_dists.size > 0:
+                self.accumulated_distances = np.concatenate([self.accumulated_distances, current_dists])
+                
+        elif self.distance_display_mode == 1:  # Проекции
+            current_dx, current_dy = self._compute_pairwise_projections_fast(max_pairs=5000)
+            if current_dx.size > 0:
+                self.accumulated_dx = np.concatenate([self.accumulated_dx, current_dx])
+            if current_dy.size > 0:
+                self.accumulated_dy = np.concatenate([self.accumulated_dy, current_dy])
+                
+        else:  # Расстояние со знаком
+            current_signed = self._compute_pairwise_signed_fast(max_pairs=5000)
+            if current_signed.size > 0:
+                self.accumulated_signed = np.concatenate([self.accumulated_signed, current_signed])
+
+        # Добавляем текущие данные к накопленным
+        self.accumulated_x = np.concatenate([self.accumulated_x, current_x])
+        self.accumulated_y = np.concatenate([self.accumulated_y, current_y])
+
+        # Ограничиваем размер массивов для предотвращения переполнения памяти
+        if len(self.accumulated_x) > self.max_accumulated_points:
+            self.accumulated_x = self.accumulated_x[-self.max_accumulated_points:]
+        if len(self.accumulated_y) > self.max_accumulated_points:
+            self.accumulated_y = self.accumulated_y[-self.max_accumulated_points:]
+        if len(self.accumulated_distances) > self.max_accumulated_points:
+            self.accumulated_distances = self.accumulated_distances[-self.max_accumulated_points:]
+        if len(self.accumulated_dx) > self.max_accumulated_points:
+            self.accumulated_dx = self.accumulated_dx[-self.max_accumulated_points:]
+        if len(self.accumulated_dy) > self.max_accumulated_points:
+            self.accumulated_dy = self.accumulated_dy[-self.max_accumulated_points:]
+        if len(self.accumulated_signed) > self.max_accumulated_points:
+            self.accumulated_signed = self.accumulated_signed[-self.max_accumulated_points:]
+
+        lang = self.get_lang_cb()
+        s = STRINGS[lang.value]
+
         # Строим гистограммы из накопленных данных
         if len(self.accumulated_x) > 0:
-            self.ax_histx.hist(self.accumulated_x, bins=self.bins_count, density=True,
-                               color="#8bb7d7", alpha=0.8)
+            self.ax_histx.hist(self.accumulated_x, bins=self.bins_count, density=True, color="#8bb7d7", alpha=0.8)
         self.ax_histx.set_ylabel("p(x)", labelpad=5)
         self.ax_histx.set_title(s["sim.hist.x"], fontsize=10, fontweight='bold')
 
         if len(self.accumulated_y) > 0:
-            self.ax_histy.hist(self.accumulated_y, bins=self.bins_count, density=True,
-                               color="#f9ad6c", alpha=0.8)
+            self.ax_histy.hist(self.accumulated_y, bins=self.bins_count, density=True, color="#f9ad6c", alpha=0.8)
         self.ax_histy.set_ylabel("p(y)", labelpad=5)
         self.ax_histy.set_title(s["sim.hist.y"], fontsize=10, fontweight='bold')
 
-        if len(self.accumulated_distances) > 0:
-            self.ax_histd.hist(self.accumulated_distances, bins=self.bins_count, density=True,
-                               color="#8dd38d", alpha=0.85)
-        self.ax_histd.set_ylabel("p(r)", labelpad=5)
-        self.ax_histd.set_xlabel("r")
-        self.ax_histd.set_title(s["sim.hist.r"], fontsize=10, fontweight='bold')
+        # Разные режимы отображения для третьего графика
+        if self.distance_display_mode == 0:  # Обычное расстояние
+            if len(self.accumulated_distances) > 0:
+                self.ax_histd.hist(self.accumulated_distances, bins=self.bins_count, density=True, color="#8dd38d",
+                                   alpha=0.85)
+            self.ax_histd.set_ylabel("p(r)", labelpad=5)
+            self.ax_histd.set_xlabel("r")
+            self.ax_histd.set_title(s["sim.hist.r"], fontsize=10, fontweight='bold')
+            
+        elif self.distance_display_mode == 1:  # Проекции
+            # Показываем проекции dx и dy на одном графике
+            has_dx = len(self.accumulated_dx) > 0
+            has_dy = len(self.accumulated_dy) > 0
+            
+            if has_dx:
+                self.ax_histd.hist(self.accumulated_dx, bins=self.bins_count, density=True, 
+                                  color="#8dd38d", alpha=0.6, label="Δx")
+            if has_dy:
+                self.ax_histd.hist(self.accumulated_dy, bins=self.bins_count, density=True, 
+                                  color="#8bb7d7", alpha=0.6, label="Δy")
+            
+            self.ax_histd.set_ylabel("p(Δ)", labelpad=5)
+            self.ax_histd.set_xlabel("Δ")
+            self.ax_histd.set_title("Проекции расстояния (все частицы)", fontsize=10, fontweight='bold')
+            
+            # Добавляем легенду только если есть данные
+            if has_dx or has_dy:
+                self.ax_histd.legend()
+            
+        else:  # Расстояние со знаком
+            if len(self.accumulated_signed) > 0:
+                self.ax_histd.hist(self.accumulated_signed, bins=self.bins_count, density=True, 
+                                  color="#8d6e63", alpha=0.85)
+            self.ax_histd.set_ylabel("p(rₛ)", labelpad=5)
+            self.ax_histd.set_xlabel("rₛ (со знаком)")
+            self.ax_histd.set_title("Расстояние со знаком (все частицы)", fontsize=10, fontweight='bold')
+            # Добавляем вертикальную линию в нуле
+            self.ax_histd.axvline(x=0, color='red', linestyle='--', alpha=0.7)
 
-        # ДОБАВЛЯЕМ ЭТИ СТРОКИ ДЛЯ УВЕЛИЧЕНИЯ РАССТОЯНИЯ МЕЖДУ ГРАФИКАМИ
-        self.fig_hist.subplots_adjust(
-            left=0.12,  # увеличиваем левый отступ
-            right=0.95,  # уменьшаем правый отступ
-            bottom=0.08,  # увеличиваем нижний отступ
-            top=0.95,  # уменьшаем верхний отступ
-            hspace=0.5,  # УВЕЛИЧИВАЕМ расстояние между subplots по вертикали
-            wspace=0.2  # расстояние между subplots по горизонтали
-        )
+    def _compute_pairwise_projections_fast(self, max_pairs=5000):
+        """Вычисляет проекции расстояний для случайной выборки пар частиц"""
+        N = self.system.n()
+        if N < 2:
+            return np.array([]), np.array([])
 
-        self.canvas_hist.draw_idle()
+        pos = self.system.pos
+        dx_list = np.zeros(max_pairs)
+        dy_list = np.zeros(max_pairs)
+        count = 0
+
+        for _ in range(max_pairs * 2):
+            i = np.random.randint(0, N)
+            j = np.random.randint(0, N)
+            if i != j:
+                dx = pos[j, 0] - pos[i, 0]
+                dy = pos[j, 1] - pos[i, 1]
+                dx_list[count] = dx
+                dy_list[count] = dy
+                count += 1
+                if count >= max_pairs:
+                    break
+
+        return dx_list[:count], dy_list[:count]
+
+    def _compute_pairwise_signed_fast(self, max_pairs=5000):
+        """Вычисляет расстояния со знаком для случайной выборки пар частиц"""
+        N = self.system.n()
+        if N < 2:
+            return np.array([])
+
+        pos = self.system.pos
+        signed_list = np.zeros(max_pairs)
+        count = 0
+
+        for _ in range(max_pairs * 2):
+            i = np.random.randint(0, N)
+            j = np.random.randint(0, N)
+            if i != j:
+                dx = pos[j, 0] - pos[i, 0]
+                dy = pos[j, 1] - pos[i, 1]
+                distance = math.sqrt(dx * dx + dy * dy)
+                # Знак зависит от направления по X
+                signed_distance = distance * (1 if dx >= 0 else -1)
+                signed_list[count] = signed_distance
+                count += 1
+                if count >= max_pairs:
+                    break
+
+        return signed_list[:count]
+
 
     def _compute_quick_distances_sample(self, sample_size):
         """Быстрое вычисление случайной выборки расстояний"""
@@ -1471,10 +2013,19 @@ class SimulationWidget(QtWidgets.QWidget):
             self.canvas_anim.draw_idle()
 
     def _on_mouse(self, event):
-        if not self.draw_mode or event.inaxes != self.ax_anim: return
+        if event.inaxes != self.ax_anim: 
+            return
+            
+        # Если включен режим выбора частиц, обрабатываем выбор
+        if self.particle_selection_mode and event.button == 1:
+            self._select_particle(event)
+            return
+            
+        # Остальная логика для рисования полигонов
         vessel_kind = str(self.vessel_box.currentText())
-        if vessel_kind not in ("poly", "Многоугольник"): return
-
+        if not self.draw_mode or vessel_kind not in ("poly", "Многоугольник"): 
+            return
+            
         if event.button == 1:
             self.poly_points.append((event.xdata, event.ydata))
             self._preview_poly()
@@ -1486,6 +2037,72 @@ class SimulationWidget(QtWidgets.QWidget):
                 self._draw_vessel_patch()
                 self.system.seed()
                 self._redraw_particles()
+    
+    def _select_particle(self, event):
+        """Выбор частицы для измерения расстояния"""
+        if self.system.pos is None or len(self.system.pos) == 0:
+            return
+            
+        # Находим ближайшую частицу к точке клика
+        click_pos = np.array([event.xdata, event.ydata])
+        distances = np.linalg.norm(self.system.pos - click_pos, axis=1)
+        closest_idx = np.argmin(distances)
+        
+        # Если частица достаточно близко к клику
+        if distances[closest_idx] < self.system.visual_radius * 3:
+            if closest_idx in self.selected_particles:
+                # Убираем частицу из выбора
+                self.selected_particles.remove(closest_idx)
+            else:
+                # Добавляем частицу в выбор (максимум 2)
+                if len(self.selected_particles) < 2:
+                    self.selected_particles.append(closest_idx)
+            
+            self._update_distance_display()
+            self._redraw_particles()
+
+    def _update_distance_display(self):
+        """Обновление отображения расстояния между выбранными частицами"""
+        # Удаляем старую линию
+        if self.distance_line:
+            self.distance_line.remove()
+            self.distance_line = None
+        
+        # Рисуем новую линию, если выбрано 2 частицы
+        if len(self.selected_particles) == 2 and self.system.pos is not None:
+            pos1 = self.system.pos[self.selected_particles[0]]
+            pos2 = self.system.pos[self.selected_particles[1]]
+            
+            # Создаем линию между частицами
+            self.distance_line = patches.ConnectionPatch(
+                pos1, pos2, 'data', 'data',
+                arrowstyle='-', color='red', linewidth=2, alpha=0.7
+            )
+            self.ax_anim.add_patch(self.distance_line)
+            
+            # Добавляем информацию о расстоянии в зависимости от режима
+            distance = np.linalg.norm(pos1 - pos2)
+            dx = pos2[0] - pos1[0]
+            dy = pos2[1] - pos1[1]
+            mid_point = (pos1 + pos2) / 2
+            
+            if self.distance_display_mode == 0:
+                text = f'r = {distance:.1f}'
+            elif self.distance_display_mode == 1:
+                text = f'Δx = {dx:.1f}\nΔy = {dy:.1f}'
+            else:  # mode 2
+                signed_dist = distance * np.sign(dx)
+                text = f'rₛ = {signed_dist:.1f}'
+            
+            # Отображаем текст с информацией
+            # self.ax_anim.text(mid_point[0], mid_point[1], text, 
+            #                  fontsize=9, color='red', ha='center', va='center',
+            #                  bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
+        
+        self.canvas_anim.draw_idle()
+        
+        self.canvas_anim.draw_idle()
+
 
     def _preview_poly(self):
         if len(self.poly_points) >= 2:
@@ -1535,6 +2152,20 @@ class SimulationWidget(QtWidgets.QWidget):
         def set_lbl(obj_name, text_key):
             w = self.findChild(QtWidgets.QLabel, obj_name)
             if w: w.setText(STRINGS[lang.value].get(text_key, ""))
+
+        hist_title = self.findChild(QtWidgets.QLabel)
+        if hist_title:
+            hist_title.setText("Гистограммы")
+
+        # Обновляем кнопку переключения режима
+        self._update_display_mode_button()
+        self._update_reset_buttons()
+        
+        if hasattr(self, 'btn_particle_select'):
+            if self.particle_selection_mode:
+                self.btn_particle_select.setText(s.get("sim.btn.cancel_selection", "Отменить выбор"))
+            else:
+                self.btn_particle_select.setText(s.get("sim.btn.select_particles", "Выбор частиц"))
 
         set_lbl("lbl_N", "sim.N")
         set_lbl("unit_N", "sim.N.unit")
