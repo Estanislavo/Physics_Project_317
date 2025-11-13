@@ -40,6 +40,7 @@ STRINGS = {
         "menu.subtitle": "в сосудах различной формы",
         "menu.start": "Начать симуляцию",
         "menu.authors": "Об авторах",
+        "menu.theory": "Теория",
         "menu.exit": "Выход",
 
         "vessel.rect": "Прямоугольник",
@@ -48,34 +49,34 @@ STRINGS = {
 
         "sim.settings": "Настройки симуляции",
         "sim.N": "N",
-        "sim.N.unit": "шт",
+        "sim.N.unit": "5-100",
         "sim.N.help": "Число частиц",
         "sim.R": "R",
-        "sim.R.unit": "ед",
+        "sim.R.unit": "0.5-10",
         "sim.R.help": "Радиус частицы",
         "sim.T": "T",
-        "sim.T.unit": "kT",
+        "sim.T.unit": "0.1-50",
         "sim.T.help": "Температура",
         "sim.m": "m",
-        "sim.m.unit": "ед",
+        "sim.m.unit": "0.01-100",
         "sim.m.help": "Масса частицы",
         "sim.collisions": "Столкновения частиц",
-        "sim.pot": "Pot",
+        "sim.pot": "Тип",
         "sim.pot.help": "Тип парного потенциала",
         "sim.eps": "ε",
-        "sim.eps.unit": "кДж/моль",
+        "sim.eps.unit": "0-100",
         "sim.eps.help": "Энергетический масштаб",
         "sim.sigma": "σ",
-        "sim.sigma.unit": "ед",
+        "sim.sigma.unit": "1-30",
         "sim.sigma.help": "Характерное расстояние LJ",
         "sim.De": "De",
-        "sim.De.unit": "кДж/моль",
+        "sim.De.unit": "0-100",
         "sim.De.help": "Глубина ямы Morse",
         "sim.a": "a",
-        "sim.a.unit": "1/ед",
+        "sim.a.unit": "0.01-5",
         "sim.a.help": "Жёсткость Morse",
         "sim.r0": "r₀",
-        "sim.r0.unit": "ед",
+        "sim.r0.unit": "1-20",
         "sim.r0.help": "Равновесное расстояние (Morse)",
         "sim.vessel": "Сосуд",
         "sim.vessel.help": "Форма сосуда",
@@ -93,7 +94,7 @@ STRINGS = {
         "sim.btn.collapse": "Свернуть",
         "sim.btn.expand": "Развернуть",
         "sim.top.settings": "≡ Настройки",
-        "sim.anim.title": "Сосуд — область частиц",
+        "sim.anim.title": "Область моделирования",
 
         "sim.hist.x": "Распределение X",
         "sim.hist.y": "Распределение Y",
@@ -112,6 +113,7 @@ STRINGS = {
         "menu.subtitle": "in vessels of various shapes",
         "menu.start": "Start Simulation",
         "menu.authors": "Authors",
+        "menu.theory": "Theory",
         "menu.exit": "Exit",
 
         "vessel.rect": "Rectangle",
@@ -120,34 +122,34 @@ STRINGS = {
 
         "sim.settings": "Simulation settings",
         "sim.N": "N",
-        "sim.N.unit": "pcs",
+        "sim.N.unit": "5-100",
         "sim.N.help": "Number of particles",
         "sim.R": "R",
-        "sim.R.unit": "u",
+        "sim.R.unit": "0.5-10",
         "sim.R.help": "Particle radius",
         "sim.T": "T",
-        "sim.T.unit": "kT",
+        "sim.T.unit": "0.1-50",
         "sim.T.help": "Temperature",
         "sim.m": "m",
-        "sim.m.unit": "u",
+        "sim.m.unit": "0.01-100",
         "sim.m.help": "Particle mass",
         "sim.collisions": "Particle collisions",
-        "sim.pot": "Pot",
+        "sim.pot": "Type",
         "sim.pot.help": "Pair potential type",
         "sim.eps": "ε",
-        "sim.eps.unit": "kJ/mol",
+        "sim.eps.unit": "0-100",
         "sim.eps.help": "Energy scale",
         "sim.sigma": "σ",
-        "sim.sigma.unit": "u",
+        "sim.sigma.unit": "1-30",
         "sim.sigma.help": "Characteristic LJ distance",
         "sim.De": "De",
-        "sim.De.unit": "kJ/mol",
+        "sim.De.unit": "0-100",
         "sim.De.help": "Morse well depth",
         "sim.a": "a",
-        "sim.a.unit": "1/u",
+        "sim.a.unit": "0.01-5",
         "sim.a.help": "Morse stiffness",
         "sim.r0": "r₀",
-        "sim.r0.unit": "u",
+        "sim.r0.unit": "1-20",
         "sim.r0.help": "Equilibrium distance (Morse)",
         "sim.vessel": "Vessel",
         "sim.vessel.help": "Vessel shape",
@@ -165,7 +167,7 @@ STRINGS = {
         "sim.btn.collapse": "Collapse",
         "sim.btn.expand": "Expand",
         "sim.top.settings": "≡ Settings",
-        "sim.anim.title": "Vessel — particle domain",
+        "sim.anim.title": "Simulation area",
 
         "sim.hist.x": "Distribution of X",
         "sim.hist.y": "Distribution of Y",
@@ -184,6 +186,7 @@ STRINGS = {
         "menu.subtitle": "在各种形状容器中",
         "menu.start": "开始模拟",
         "menu.authors": "关于作者",
+        "menu.theory": "理论",
         "menu.exit": "退出",
 
         "vessel.rect": "矩形",
@@ -192,35 +195,35 @@ STRINGS = {
 
         "sim.settings": "模拟设置",
         "sim.N": "N",
-        "sim.N.unit": "个",
+        "sim.N.unit": "5-100",
         "sim.N.help": "粒子数量",
         "sim.R": "R",
-        "sim.R.unit": "单位",
+        "sim.R.unit": "0.5-10",
         "sim.R.help": "粒子半径",
         "sim.T": "T",
-        "sim.T.unit": "kT",
+        "sim.T.unit": "0.1-50",
         "sim.T.help": "温度",
         "sim.m": "m",
-        "sim.m.unit": "单位",
+        "sim.m.unit": "0.01-100",
         "sim.m.help": "粒子质量",
         "sim.collisions": "粒子碰撞",
-        "sim.pot": "势能",
+        "sim.pot": "类型",
         "sim.pot.help": "对势类型",
         "sim.eps": "ε",
-        "sim.eps.unit": "千焦/摩尔",
+        "sim.eps.unit": "0-100",
         "sim.eps.help": "能量尺度",
         "sim.sigma": "σ",
         "boss": "奇奇吉娜·奥尔加·亚历山德罗夫娜",
-        "sim.sigma.unit": "单位",
+        "sim.sigma.unit": "1-30",
         "sim.sigma.help": "LJ特征距离",
         "sim.De": "De",
-        "sim.De.unit": "千焦/摩尔",
+        "sim.De.unit": "0-100",
         "sim.De.help": "Morse势阱深度",
         "sim.a": "a",
-        "sim.a.unit": "1/单位",
+        "sim.a.unit": "0.01-5",
         "sim.a.help": "Morse刚度",
         "sim.r0": "r₀",
-        "sim.r0.unit": "单位",
+        "sim.r0.unit": "1-20",
         "sim.r0.help": "平衡距离 (Morse)",
         "sim.vessel": "容器",
         "sim.vessel.help": "容器形状",
@@ -238,7 +241,7 @@ STRINGS = {
         "sim.btn.collapse": "折叠",
         "sim.btn.expand": "展开",
         "sim.top.settings": "≡ 设置",
-        "sim.anim.title": "容器 - 粒子区域",
+        "sim.anim.title": "模拟区域",
 
         "sim.hist.x": "X分布",
         "sim.hist.y": "Y分布",
@@ -772,10 +775,11 @@ class WinCheckBox(QtWidgets.QCheckBox):
 
 
 class MainMenuWidget(QtWidgets.QWidget):
-    def __init__(self, parent, start_cb, lang_toggle_cb, get_lang_cb, authors_cb=None):
+    def __init__(self, parent, start_cb, lang_toggle_cb, get_lang_cb, authors_cb=None, theory_cb=None):
         super().__init__(parent)
         self.start_cb = start_cb
         self.authors_cb = authors_cb  # ← сохраняем колбэк (может быть None)
+        self.theory_cb = theory_cb  # ← новый колбэк для теории
         self.lang_toggle_cb = lang_toggle_cb
         self.get_lang_cb = get_lang_cb
         self._build_ui()
@@ -877,6 +881,16 @@ class MainMenuWidget(QtWidgets.QWidget):
         self.btn_start.clicked.connect(self.start_cb)
         center.addWidget(self.btn_start, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
 
+        # Кнопка Теория (новая кнопка)
+        if hasattr(self, "theory_cb") and self.theory_cb:
+            self.btn_theory = QtWidgets.QPushButton()
+            self.btn_theory.setFixedSize(240, 50)  # ФИКСИРУЕМ РАЗМЕР
+            self.btn_theory.setStyleSheet(
+                "background:#5a8d5a; color:white; font-weight:600; font-size:14pt; border-radius:6px; margin-top:10px;"
+            )
+            self.btn_theory.clicked.connect(self.theory_cb)
+            center.addWidget(self.btn_theory, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+
         # Кнопка Об авторах (опционально)
         if hasattr(self, "authors_cb") and self.authors_cb:
             self.btn_authors = QtWidgets.QPushButton()
@@ -924,6 +938,8 @@ class MainMenuWidget(QtWidgets.QWidget):
             self.btn_flag.setIconSize(QtCore.QSize(28, 20))
         if hasattr(self, 'btn_authors') and self.btn_authors is not None:
             self.btn_authors.setText(s.get('menu.authors', 'Об авторах'))
+        if hasattr(self, 'btn_theory') and self.btn_theory is not None:
+            self.btn_theory.setText(s.get('menu.theory', 'Теория'))
 
 
 class SimulationWidget(QtWidgets.QWidget):
@@ -946,57 +962,60 @@ class SimulationWidget(QtWidgets.QWidget):
     def _build_ui(self):
         main_l = QtWidgets.QHBoxLayout(self)
         self.settings_panel = QtWidgets.QWidget()
-        self.settings_panel.setFixedWidth(300)  # ФИКСИРУЕМ ШИРИНУ
+        self.settings_panel.setFixedWidth(300)  # УВЕЛИЧИЛИ ШИРИНУ для больших шрифтов
         self.settings_panel.setStyleSheet("background:#f7f7f8;")
         sp_layout = QtWidgets.QVBoxLayout(self.settings_panel)
         sp_layout.setContentsMargins(12, 12, 12, 12)
 
         self.lbl_settings_title = QtWidgets.QLabel()
-        self.lbl_settings_title.setStyleSheet("font-size:14pt; font-weight:700;")
+        self.lbl_settings_title.setStyleSheet("font-size:16pt; font-weight:700;")  # УВЕЛИЧИЛИ ШРИФТ
         sp_layout.addWidget(self.lbl_settings_title)
-        sp_layout.addSpacing(6)
+        sp_layout.addSpacing(8)
 
         def add_row(key_label, widget, key_unit="", key_help=""):
             row = QtWidgets.QHBoxLayout()
             lbl = QtWidgets.QLabel()  # текст поставим в update_language
             lbl.setObjectName(f"lbl_{key_label}")
-            lbl.setStyleSheet("font-size:12pt;")
-            lbl.setFixedWidth(100)  # ФИКСИРУЕМ ШИРИНУ
+            lbl.setStyleSheet("font-size:13pt;")  # УВЕЛИЧИЛИ ШРИФТ
+            lbl.setFixedWidth(100)  # УВЕЛИЧИЛИ ШИРИНУ для больших шрифтов
             if key_help:
                 h = QtWidgets.QLabel()
                 h.setObjectName(f"help_{key_label}")
                 h.setWordWrap(True)
-                h.setStyleSheet("color:#555;font-size:12pt;margin-top:2px;")
+                h.setStyleSheet("color:#555;font-size:11pt;")  # УВЕЛИЧИЛИ ШРИФТ
                 sp_layout.addWidget(h)
             row.addWidget(lbl)
             row.addWidget(widget)
-            widget.setStyleSheet("font-size:10pt;")
+            widget.setStyleSheet("font-size:10pt;")  # УВЕЛИЧИЛИ ШРИФТ И PADDING
             if key_unit:
                 u = QtWidgets.QLabel()
                 u.setObjectName(f"unit_{key_label}")
                 u.setFixedWidth(80)  # ФИКСИРУЕМ ШИРИНУ
-                u.setStyleSheet("font-size:12pt;")
+                u.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
                 row.addWidget(u)
             sp_layout.addLayout(row)
 
         self.spin_N = QtWidgets.QSpinBox()
-        self.spin_N.setRange(5, 50)
+        self.spin_N.setRange(5, 100)  # УВЕЛИЧИЛИ ДИАПАЗОН
         self.spin_N.setValue(10)
+        self.spin_N.setFixedHeight(25)
         self.spin_N.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("N", self.spin_N, "sim.N.unit", "sim.N.help")
 
         self.edit_R = QtWidgets.QDoubleSpinBox()
-        self.edit_R.setRange(0.5, 7.0)  # Изменить диапазон для нового масштаба
+        self.edit_R.setRange(0.5, 10.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
         self.edit_R.setSingleStep(0.1)
         self.edit_R.setDecimals(1)
         self.edit_R.setValue(3.0)
+        self.edit_R.setFixedHeight(25)
         self.edit_R.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("R", self.edit_R, "sim.R.unit", "sim.R.help")
 
         self.edit_T = QtWidgets.QDoubleSpinBox()
-        self.edit_T.setRange(1, 15)
-        self.edit_T.setSingleStep(1)
+        self.edit_T.setRange(0.1, 50.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
+        self.edit_T.setSingleStep(0.5)
         self.edit_T.setValue(5)
+        self.edit_T.setFixedHeight(25)
         self.edit_T.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("T", self.edit_T, "sim.T.unit", "sim.T.help")
 
@@ -1004,58 +1023,67 @@ class SimulationWidget(QtWidgets.QWidget):
         self.edit_m.setRange(0.01, 100.0)
         self.edit_m.setSingleStep(0.1)
         self.edit_m.setValue(1.0)
+        self.edit_m.setFixedHeight(25)
         self.edit_m.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("m", self.edit_m, "sim.m.unit", "sim.m.help")
 
         self.check_collisions = WinCheckBox()
         self.check_collisions.stateChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        self.check_collisions.setStyleSheet("font-size:12pt;")
+        self.check_collisions.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
         self.check_collisions.setChecked(True)
         sp_layout.addWidget(self.check_collisions)
 
         self.pot_box = QtWidgets.QComboBox()
         self.pot_box.currentIndexChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
+        self.pot_box.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
         add_row("pot", self.pot_box, "", "sim.pot.help")
 
         self.edit_eps = QtWidgets.QDoubleSpinBox()
-        self.edit_eps.setRange(0.0, 50.0)
-        self.edit_eps.setValue(1.0)
+        self.edit_eps.setRange(0.0, 100.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
+        self.edit_eps.setValue(10.0)
+        self.edit_eps.setFixedHeight(25)
         self.edit_eps.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("eps", self.edit_eps, "sim.eps.unit", "sim.eps.help")
 
         self.edit_sigma = QtWidgets.QDoubleSpinBox()
-        self.edit_sigma.setRange(2.0, 20.0)  # Изменить диапазон
+        self.edit_sigma.setRange(1.0, 30.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
         self.edit_sigma.setValue(15.0)
+        self.edit_sigma.setFixedHeight(25)
         self.edit_sigma.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("sigma", self.edit_sigma, "sim.sigma.unit", "sim.sigma.help")
 
         self.edit_De = QtWidgets.QDoubleSpinBox()
-        self.edit_De.setRange(0.0, 50.0)
-        self.edit_De.setValue(1.0)
+        self.edit_De.setRange(0.0, 100.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
+        self.edit_De.setValue(20.0)
+        self.edit_De.setFixedHeight(25)
         self.edit_De.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("De", self.edit_De, "sim.De.unit", "sim.De.help")
 
         self.edit_a = QtWidgets.QDoubleSpinBox()
-        self.edit_a.setRange(0.05, 2.0)  # было (0.001, 0.5)
-        self.edit_a.setValue(0.3)
+        self.edit_a.setRange(0.01, 5.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
+        self.edit_a.setValue(0.5)
+        self.edit_a.setFixedHeight(25)
         self.edit_a.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("a", self.edit_a, "sim.a.unit", "sim.a.help")
 
         self.edit_r0 = QtWidgets.QDoubleSpinBox()
-        self.edit_r0.setRange(1, 10.0)  # было (0.1, 50.0)
+        self.edit_r0.setRange(1.0, 20.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
         self.edit_r0.setValue(2.5)
+        self.edit_r0.setFixedHeight(25)
         self.edit_r0.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         add_row("r0", self.edit_r0, "sim.r0.unit", "sim.r0.help")
 
         self.vessel_box = QtWidgets.QComboBox()
         self.vessel_box.addItems(["Прямоугольник", "Круг", "Многоугольник"])
         self.vessel_box.currentIndexChanged.connect(self._on_vessel_changed)  # ОСОБАЯ ОБРАБОТКА
-        self.vessel_box.setStyleSheet("font-size:12pt;color: black;")
+        self.vessel_box.setFixedHeight(25)
+        self.vessel_box.setStyleSheet("font-size:12pt;color: black;")  # УВЕЛИЧИЛИ ШРИФТ
         add_row("vessel", self.vessel_box, "", "sim.vessel.help")
 
         self.spin_interact_step = QtWidgets.QSpinBox()
         self.spin_interact_step.setRange(1, 1000)
         self.spin_interact_step.setValue(1)
+        self.spin_interact_step.setFixedHeight(25)
         self.spin_interact_step.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
         # add_row("interact", self.spin_interact_step, "sim.interact.unit", "")
 
@@ -1063,46 +1091,35 @@ class SimulationWidget(QtWidgets.QWidget):
         self.spin_bins = QtWidgets.QSpinBox()
         self.spin_bins.setRange(5, 100)
         self.spin_bins.setValue(self.bins_count)
+        self.spin_bins.setFixedHeight(25)
         self.spin_bins.valueChanged.connect(self._on_bins_changed)
         add_row("bins", self.spin_bins, "", "sim.bins.help")
 
-        sp_layout.addSpacing(8)
+        sp_layout.addSpacing(12)
         self.btn_draw = QtWidgets.QPushButton()
         self.btn_draw.clicked.connect(self._enter_draw_mode)
-        self.btn_draw.setFixedHeight(25)  # ФИКСИРУЕМ ВЫСОТУ
-        self.btn_draw.setStyleSheet("font-size:11pt;")
+        self.btn_draw.setFixedHeight(25)  # УВЕЛИЧИЛИ ВЫСОТУ
+        self.btn_draw.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
         sp_layout.addWidget(self.btn_draw)
 
         self.btn_clear = QtWidgets.QPushButton()
         self.btn_clear.clicked.connect(self._clear_poly)
-        self.btn_clear.setFixedHeight(25)  # ФИКСИРУЕМ ВЫСОТУ
-        self.btn_clear.setStyleSheet("font-size:11pt;")
+        self.btn_clear.setFixedHeight(25)  # УВЕЛИЧИЛИ ВЫСОТУ
+        self.btn_clear.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
         sp_layout.addWidget(self.btn_clear)
 
         self.btn_run = QtWidgets.QPushButton()
         self.btn_run.clicked.connect(self._toggle_run)
-        self.btn_run.setFixedHeight(25)  # ФИКСИРУЕМ ВЫСОТУ
-        self.btn_run.setStyleSheet("font-size:11pt;")
+        self.btn_run.setFixedHeight(25)  # УВЕЛИЧИЛИ ВЫСОТУ
+        self.btn_run.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
         sp_layout.addWidget(self.btn_run)
-
-        # self.btn_apply = QtWidgets.QPushButton()
-
-        # self.btn_apply.setFixedHeight(25)  # ФИКСИРУЕМ ВЫСОТУ
-        # self.btn_apply.setStyleSheet("font-size:11pt;")
-        # sp_layout.addWidget(self.btn_apply)
 
         self.btn_back = QtWidgets.QPushButton()
         self.btn_back.clicked.connect(self.back_cb)
-        self.btn_back.setFixedHeight(25)  # ФИКСИРУЕМ ВЫСОТУ
-        self.btn_back.setStyleSheet("font-size:11pt;")
+        self.btn_back.setFixedHeight(25)  # УВЕЛИЧИЛИ ВЫСОТУ
+        self.btn_back.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
         sp_layout.addStretch(1)
         sp_layout.addWidget(self.btn_back)
-
-        # self.btn_collapse = QtWidgets.QPushButton()
-        # self.btn_collapse.clicked.connect(self._toggle_settings)
-        # self.btn_collapse.setFixedHeight(25)  # ФИКСИРУЕМ ВЫСОТУ
-        # self.btn_collapse.setStyleSheet("font-size:11pt;")
-        # sp_layout.addWidget(self.btn_collapse)
 
         canvas_container = QtWidgets.QHBoxLayout()
         main_l.addWidget(self.settings_panel)
@@ -1116,8 +1133,8 @@ class SimulationWidget(QtWidgets.QWidget):
 
         top_bar = QtWidgets.QHBoxLayout()
         self.btn_toggle_settings_small = QtWidgets.QPushButton()
-        self.btn_toggle_settings_small.setFixedSize(110, 28)  # ФИКСИРУЕМ РАЗМЕР
-        self.btn_toggle_settings_small.setStyleSheet("font-size:10pt;")
+        self.btn_toggle_settings_small.setFixedSize(110, 28)  # УВЕЛИЧИЛИ РАЗМЕР
+        self.btn_toggle_settings_small.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
         self.btn_toggle_settings_small.clicked.connect(self._toggle_settings)
         top_bar.addWidget(self.btn_toggle_settings_small, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
         top_bar.addStretch(1)
@@ -1173,11 +1190,7 @@ class SimulationWidget(QtWidgets.QWidget):
             self.system.params.r0 = float(self.edit_r0.value())
 
             # Если изменилось количество частиц, пересоздаем систему
-            # if self.system.n() != self.system.N:
             self._reinitialize_system()
-            # else:
-            # Иначе просто обновляем визуализацию
-            # self._update_particle_visualization()
 
     def _on_vessel_changed(self):
         # Особая обработка изменения типа сосуда
@@ -1204,11 +1217,11 @@ class SimulationWidget(QtWidgets.QWidget):
 
         # Визуальная индикация отключенного состояния
         if not is_polygon_mode:
-            self.btn_draw.setStyleSheet("font-size:11pt; background-color: #cccccc; color: #666666;")
-            self.btn_clear.setStyleSheet("font-size:11pt; background-color: #cccccc; color: #666666;")
+            self.btn_draw.setStyleSheet("font-size:12pt; background-color: #cccccc; color: #666666;")
+            self.btn_clear.setStyleSheet("font-size:12pt; background-color: #cccccc; color: #666666;")
         else:
-            self.btn_draw.setStyleSheet("font-size:11pt;")
-            self.btn_clear.setStyleSheet("font-size:11pt;")
+            self.btn_draw.setStyleSheet("font-size:12pt;")
+            self.btn_clear.setStyleSheet("font-size:12pt;")
 
     def _reinitialize_system(self):
         """Полная переинициализация системы с текущими настройками"""
@@ -1441,10 +1454,8 @@ class SimulationWidget(QtWidgets.QWidget):
         s = STRINGS[lang.value]
         if self.settings_panel.isVisible():
             self.settings_panel.hide()
-            # self.btn_collapse.setText(s["sim.btn.expand"])
         else:
             self.settings_panel.show()
-            # self.btn_collapse.setText(s["sim.btn.collapse"])
 
     def _enter_draw_mode(self):
         vessel_kind = str(self.vessel_box.currentText())
@@ -1558,16 +1569,13 @@ class SimulationWidget(QtWidgets.QWidget):
         set_lbl("lbl_vessel", "sim.vessel")
         set_lbl("help_vessel", "sim.vessel.help")
         set_lbl("lbl_interact", "sim.interact")
-        # set_lbl("unit_interact", "sim.interact.unit")
         set_lbl("lbl_bins", "sim.bins")
         set_lbl("help_bins", "sim.bins.help")
 
         self.btn_draw.setText(s["sim.btn.draw"])
         self.btn_clear.setText(s["sim.btn.clear"])
         self.btn_run.setText(s["sim.btn.pause"] if self.running else s["sim.btn.start"])
-        # self.btn_apply.setText(s["sim.btn.apply"])
         self.btn_back.setText(s["sim.btn.back"])
-        # self.btn_collapse.setText(s["sim.btn.collapse"] if self.settings_panel.isVisible() else s["sim.btn.expand"])
         self.btn_toggle_settings_small.setText(s["sim.top.settings"])
         self.ax_anim.set_title(s["sim.anim.title"])
         self.canvas_anim.draw_idle()
@@ -1725,7 +1733,8 @@ class MainWindow(QtWidgets.QMainWindow):
             start_cb=self.show_sim,
             lang_toggle_cb=self.toggle_language,
             get_lang_cb=lambda: self.lang,
-            authors_cb=self.show_authors
+            authors_cb=self.show_authors,
+            theory_cb=self.open_theory_pdf  # ← добавляем колбэк для теории
         )
         self.sim = SimulationWidget(self, back_cb=self.show_menu, get_lang_cb=lambda: self.lang)
         self.authors = AuthorsWidget(self, back_cb=self.show_menu, get_lang_cb=lambda: self.lang)
@@ -1746,6 +1755,27 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def show_authors(self):
         self.stack.setCurrentWidget(self.authors)
+
+    def open_theory_pdf(self):
+        """Открывает PDF-файл с теорией"""
+        try:
+            pdf_path = os.path.join(os.path.dirname(__file__), "theory.pdf")
+            if os.path.exists(pdf_path):
+                if sys.platform == "win32":
+                    os.startfile(pdf_path)
+                elif sys.platform == "darwin":  # macOS
+                    os.system(f'open "{pdf_path}"')
+                else:  # linux
+                    os.system(f'xdg-open "{pdf_path}"')
+            else:
+                # Если файл не найден, показываем сообщение
+                msg = QtWidgets.QMessageBox(self)
+                msg.setIcon(QtWidgets.QMessageBox.Icon.Warning)
+                msg.setWindowTitle("Файл не найден")
+                msg.setText("Файл theory.pdf не найден в папке с программой.")
+                msg.exec()
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось открыть файл теории: {str(e)}")
 
     def set_language(self, lang: Lang):
         self.lang = lang
@@ -1778,7 +1808,7 @@ def main():
     font_families = ["Microsoft YaHei", "Noto Sans CJK SC", "SimSun", "Arial"]
     for font_family in font_families:
         if QFont(font_family).exactMatch():
-            font = QFont(font_family, 9)
+            font = QFont(font_family, 11)  # УВЕЛИЧИЛИ БАЗОВЫЙ РАЗМЕР ШРИФТА
             app.setFont(font)
             break
 
