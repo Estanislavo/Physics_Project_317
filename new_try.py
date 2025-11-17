@@ -1273,7 +1273,30 @@ class SimulationWidget(QtWidgets.QWidget):
         
         # Добавляем всплывающие подсказки
         self.btn_reset_data.setToolTip(s.get("sim.btn.reset_data.tooltip", "Очистить все накопленные данные гистограмм"))
-    
+
+    def _reset_hist_data(self):
+        """Сброс накопленных данных, не трогая выбор частиц"""
+        # Сбрасываем накопленные данные для всех частиц
+        self.accumulated_x = np.array([])
+        self.accumulated_y = np.array([])
+        self.accumulated_distances = np.array([])
+        self.accumulated_dx = np.array([])
+        self.accumulated_dy = np.array([])
+        self.accumulated_signed = np.array([])
+
+        # Сбрасываем данные для выбранных частиц
+        self.selected_particles_data = {
+            'x': np.array([]),
+            'y': np.array([]),
+            'distances': np.array([]),
+            'dx': np.array([]),
+            'dy': np.array([]),
+            'signed_distance': np.array([])
+        }
+
+        # Перерисовываем только гистограммы
+        self._update_histograms()
+
     def _reset_data(self):
         """Сброс всех накопленных данных"""
         # Сбрасываем накопленные данные для всех частиц
@@ -1465,7 +1488,7 @@ class SimulationWidget(QtWidgets.QWidget):
         poly = self.system.vessel.poly if vessel_kind in ("poly", "Многоугольник") else None
 
         # Сбрасываем накопленные данные при изменении параметров
-        self._reset_data()
+        self._reset_hist_data()
 
         self._init_simulation(N=N, radius=radius, temp=temp, dt=dt, vessel_kind=vessel_kind, poly=poly,
                               potential_params=pot_params, mass=mass, enable_collisions=enable_collisions,
