@@ -49,7 +49,7 @@ STRINGS = {
 
         "sim.settings": "Настройки симуляции",
         "sim.N": "N",
-        "sim.N.unit": "5-100",
+        "sim.N.unit": "1-100",
         "sim.N.help": "Число частиц",
         "sim.R": "R",
         "sim.R.unit": "0.5-10",
@@ -85,8 +85,8 @@ STRINGS = {
         "sim.bins": "Бины",
         "sim.bins.help": "Количество бинов для гистограмм",
 
-        "sim.btn.draw": "Рисовать полигон",
-        "sim.btn.clear": "Очистить полигон",
+        "sim.btn.draw": "Рисовать",
+        "sim.btn.clear": "Очистить",
         "sim.btn.pause": "Пауза",
         "sim.btn.start": "Старт",
         "sim.btn.apply": "Применить",
@@ -99,15 +99,16 @@ STRINGS = {
         "sim.hist.x": "Распределение X",
         "sim.hist.y": "Распределение Y",
         "sim.hist.r": "Распределение расстояний",
+        "sim.hist.title": "Гистограммы",
 
         "sim.btn.select_particles": "Выбор частиц",
-        "sim.btn.cancel_selection": "Отменить выбор",
+        "sim.btn.cancel_selection": "Отменить",
 
         "sim.histograms.title": "Гистограммы",
-        "sim.display_mode.distance": "Обычное расстояние",
+        "sim.display_mode.distance": "Расстояние",
         "sim.display_mode.projections": "Проекции на оси",
         "sim.display_mode.signed": "Расстояние со знаком",
-        "sim.btn.reset_data": "Сбросить данные",
+        "sim.btn.reset_data": "Сбросить",
         "sim.btn.reset_data.tooltip": "Очистить все накопленные данные гистограмм",
 
         "menu.authors": "Об авторах",
@@ -168,8 +169,8 @@ STRINGS = {
         "sim.bins": "Bins",
         "sim.bins.help": "Number of bins for histograms",
 
-        "sim.btn.draw": "Draw polygon",
-        "sim.btn.clear": "Clear polygon",
+        "sim.btn.draw": "Draw",
+        "sim.btn.clear": "Clear",
         "sim.btn.pause": "Pause",
         "sim.btn.start": "Start",
         "sim.btn.apply": "Apply",
@@ -182,15 +183,16 @@ STRINGS = {
         "sim.hist.x": "Distribution of X",
         "sim.hist.y": "Distribution of Y",
         "sim.hist.r": "Distribution of pair distances",
+        "sim.hist.title": "Histograms",
 
         "sim.btn.select_particles": "Select particles",
-        "sim.btn.cancel_selection": "Cancel selection",
+        "sim.btn.cancel_selection": "Cancel",
 
         "sim.histograms.title": "Histograms",
-        "sim.display_mode.distance": "Regular distance",
+        "sim.display_mode.distance": "Distance",
         "sim.display_mode.projections": "Projections",
         "sim.display_mode.signed": "Signed distance",
-        "sim.btn.reset_data": "Reset Data",
+        "sim.btn.reset_data": "Reset",
         "sim.btn.reset_data.tooltip": "Clear all accumulated histogram data",
 
         "menu.authors": "Authors",
@@ -266,6 +268,7 @@ STRINGS = {
         "sim.hist.x": "X分布",
         "sim.hist.y": "Y分布",
         "sim.hist.r": "距离分布",
+        "sim.hist.title": "直方图",
 
         "sim.btn.select_particles": "选择粒子",
         "sim.btn.cancel_selection": "取消选择",
@@ -281,6 +284,7 @@ STRINGS = {
         "authors.title": "开发团队",
         "authors.name1": "叶尼亚金·斯坦尼斯拉夫",
         "authors.name2": "科热米亚科娃·伊丽莎白",
+        "boss": "科学指导：奇奇吉娜·奥尔加·亚历山德罗夫娜",
         "authors.back": "返回",
     },
 }
@@ -1005,182 +1009,358 @@ class SimulationWidget(QtWidgets.QWidget):
         self.update_language(self.get_lang_cb())
         self._reset_data()
 
+    # --- новые вспомогательные методы для нормализации типа сосуда ---
+    def _vessel_display_to_key(self, display_text: str) -> str:
+        """Преобразует текст из vessel_box (локализованный) в канонический ключ: 'rect'/'circle'/'poly'."""
+        lang = self.get_lang_cb()
+        s = STRINGS[lang.value]
+        txt = str(display_text)
+        if txt == s.get("vessel.rect", "") or txt.lower() in ("прямоугольник", "rectangle", "rect"):
+            return "rect"
+        if txt == s.get("vessel.circle", "") or txt.lower() in ("круг", "circle", "circ"):
+            return "circle"
+        if txt == s.get("vessel.poly", "") or txt.lower() in ("многоугольник", "polygon", "poly", "多边形"):
+            return "poly"
+        # fallback: try to inspect substrings
+        l = txt.lower()
+        if "rect" in l or "прям" in l: return "rect"
+        if "circ" in l or "круг" in l: return "circle"
+        if "poly" in l or "много" in l or "多" in l: return "poly"
+        return txt
+
+    def _vessel_kind_to_key(self, kind_str: str) -> str:
+        """Преобразует значение Vessel.kind (возможны локализованные и канонические значения) в канонический ключ."""
+        # просто делегируем к display->key (покроет оба варианта)
+        return self._vessel_display_to_key(kind_str)
+
+    def _sanitize_selected_particles(self):
+        """Убирает из self.selected_particles индексы, вышедшие за пределы текущей системы."""
+        if not hasattr(self, 'selected_particles') or self.system is None or self.system.pos is None:
+            self.selected_particles = []
+            return
+        
+        N = self.system.n()
+        
+        # Если частиц меньше 2, автоматически выключаем режим выбора
+        if N < 2 and self.particle_selection_mode:
+            self.particle_selection_mode = False
+            self.selected_particles = []
+            # Обновляем текст кнопки
+            lang = self.get_lang_cb()
+            s = STRINGS[lang.value]
+            self.btn_particle_select.setText(s.get("sim.btn.select_particles", "Выбор частиц"))
+            # Удаляем линию расстояния если была
+            if self.distance_line:
+                self.distance_line.remove()
+                self.distance_line = None
+        
+        # Фильтруем только валидные индексы
+        valid_particles = [i for i in self.selected_particles if 0 <= i < N]
+        
+        # В режиме выбора частиц оставляем максимум 2 последние выбранные
+        if self.particle_selection_mode and len(valid_particles) > 2:
+            valid_particles = valid_particles[-2:]
+        
+        self.selected_particles = valid_particles
+
     def _build_ui(self):
         main_l = QtWidgets.QHBoxLayout(self)
         self.settings_panel = QtWidgets.QWidget()
         self.settings_panel.setFixedWidth(300)
-        self.settings_panel.setStyleSheet("background:#f7f7f8;")
+        self.settings_panel.setStyleSheet("background:#f0f0f2; border-right: 2px solid #ddd;")
         sp_layout = QtWidgets.QVBoxLayout(self.settings_panel)
-        sp_layout.setContentsMargins(12, 12, 12, 12)
+        sp_layout.setContentsMargins(11, 11, 11, 11)
+        sp_layout.setSpacing(6)
 
         self.lbl_settings_title = QtWidgets.QLabel()
-        self.lbl_settings_title.setStyleSheet("font-size:16pt; font-weight:700;")  # УВЕЛИЧИЛИ ШРИФТ
+        self.lbl_settings_title.setStyleSheet("font-size:17pt; font-weight:700; color:#1a1a1a;")
         sp_layout.addWidget(self.lbl_settings_title)
-        sp_layout.addSpacing(8)
+        sp_layout.addSpacing(6)
 
-        def add_row(key_label, widget, key_unit="", key_help=""):
-            row = QtWidgets.QHBoxLayout()
-            lbl = QtWidgets.QLabel()  # текст поставим в update_language
-            lbl.setObjectName(f"lbl_{key_label}")
-            lbl.setStyleSheet("font-size:13pt;")  # УВЕЛИЧИЛИ ШРИФТ
-            lbl.setFixedWidth(100)  # УВЕЛИЧИЛИ ШИРИНУ для больших шрифтов
+        def add_slider_row(key_label, slider, label_value, key_unit="", key_help=""):
+            """Компактная строка для слайдера: [Label] [Slider] [Value] [Unit]"""
             if key_help:
                 h = QtWidgets.QLabel()
                 h.setObjectName(f"help_{key_label}")
                 h.setWordWrap(True)
-                h.setStyleSheet("color:#555;font-size:11pt;")  # УВЕЛИЧИЛИ ШРИФТ
+                h.setStyleSheet("color:#666; font-size:12pt; margin-top:4px; padding:0px;")
                 sp_layout.addWidget(h)
+            
+            row = QtWidgets.QHBoxLayout()
+            row.setContentsMargins(3, 0, 3, 0)
+            row.setSpacing(4)
+            
+            lbl = QtWidgets.QLabel()
+            lbl.setObjectName(f"lbl_{key_label}")
+            lbl.setStyleSheet("font-size:13pt; font-weight:500; color:#2c2c2c;")
+            lbl.setFixedWidth(45)
             row.addWidget(lbl)
-            row.addWidget(widget)
-            widget.setStyleSheet("font-size:10pt;")  # УВЕЛИЧИЛИ ШРИФТ И PADDING
+            
+            slider.setStyleSheet("""
+                QSlider::groove:horizontal {
+                    background: #ddd;
+                    height: 6px;
+                    border-radius: 3px;
+                }
+                QSlider::handle:horizontal {
+                    background: #3271a8;
+                    width: 14px;
+                    margin: -4px 0;
+                    border-radius: 7px;
+                }
+                QSlider::handle:horizontal:hover {
+                    background: #2a5f96;
+                }
+            """)
+            row.addWidget(slider)
+            
+            label_value.setFixedWidth(45)
+            label_value.setStyleSheet("font-size:12pt; color:#555; text-align:center;")
+            row.addWidget(label_value)
+            
             if key_unit:
                 u = QtWidgets.QLabel()
                 u.setObjectName(f"unit_{key_label}")
-                u.setFixedWidth(80)  # ФИКСИРУЕМ ШИРИНУ
-                u.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
+                u.setFixedWidth(50)
+                u.setStyleSheet("font-size:12pt; color:#777;")
                 row.addWidget(u)
+            
             sp_layout.addLayout(row)
 
-        self.spin_N = QtWidgets.QSpinBox()
-        self.spin_N.setRange(5, 100)  # УВЕЛИЧИЛИ ДИАПАЗОН
+        def add_combobox_row(key_label, combobox, key_help=""):
+            """Строка для комбобса: [Help сверху] [Label] [ComboBox]"""
+            if key_help:
+                h = QtWidgets.QLabel()
+                h.setObjectName(f"help_{key_label}")
+                h.setWordWrap(True)
+                h.setStyleSheet("color:#666; font-size:12pt; margin:0px; padding:0px;")
+                sp_layout.addWidget(h)
+            
+            row = QtWidgets.QHBoxLayout()
+            row.setContentsMargins(3, 0, 3, 0)
+            row.setSpacing(4)
+            
+            lbl = QtWidgets.QLabel()
+            lbl.setObjectName(f"lbl_{key_label}")
+            lbl.setStyleSheet("font-size:13pt; font-weight:500; color:#2c2c2c;")
+            lbl.setFixedWidth(45)
+            row.addWidget(lbl)
+            
+            combobox.setStyleSheet("""
+                QComboBox {
+                    font-size:12pt; 
+                    padding: 3px; 
+                    border: 1px solid #bbb; 
+                    border-radius: 3px;
+                    background: white;
+                }
+            """)
+            row.addWidget(combobox)
+            sp_layout.addLayout(row)
+
+        # N — ползунок (1-100)
+        self.spin_N = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.spin_N.setRange(1, 100)
         self.spin_N.setValue(10)
-        self.spin_N.setFixedHeight(22)
-        self.spin_N.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        add_row("N", self.spin_N, "sim.N.unit", "sim.N.help")
+        self.spin_N.setTickPosition(QtWidgets.QSlider.TickPosition.NoTicks)
+        self.spin_N_label = QtWidgets.QLabel("10")
+        self.spin_N.sliderMoved.connect(lambda v: self.spin_N_label.setText(str(v)))
+        self.spin_N.valueChanged.connect(lambda v: (self.spin_N_label.setText(str(v)), self._on_settings_changed()))
+        add_slider_row("N", self.spin_N, self.spin_N_label, "sim.N.unit", "sim.N.help")
 
-        self.edit_R = QtWidgets.QDoubleSpinBox()
-        self.edit_R.setRange(0.5, 10.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
-        self.edit_R.setSingleStep(0.1)
-        self.edit_R.setDecimals(1)
-        self.edit_R.setValue(3.0)
-        self.edit_R.setFixedHeight(22)
-        self.edit_R.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        add_row("R", self.edit_R, "sim.R.unit", "sim.R.help")
+        # T — ползунок (0.1-50)
+        self.edit_T = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.edit_T.setRange(1, 500)
+        self.edit_T.setValue(50)
+        self.edit_T.setTickPosition(QtWidgets.QSlider.TickPosition.NoTicks)
+        self.edit_T_label = QtWidgets.QLabel("5.0")
+        self.edit_T.sliderMoved.connect(lambda v: self.edit_T_label.setText(f"{v/10:.1f}"))
+        self.edit_T.valueChanged.connect(lambda v: (self.edit_T_label.setText(f"{v/10:.1f}"), self._on_settings_changed()))
+        add_slider_row("T", self.edit_T, self.edit_T_label, "sim.T.unit", "sim.T.help")
 
-        self.edit_T = QtWidgets.QDoubleSpinBox()
-        self.edit_T.setRange(0.1, 50.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
-        self.edit_T.setSingleStep(0.5)
-        self.edit_T.setValue(5)
-        self.edit_T.setFixedHeight(22)
-        self.edit_T.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        add_row("T", self.edit_T, "sim.T.unit", "sim.T.help")
-
-        self.edit_m = QtWidgets.QDoubleSpinBox()
-        self.edit_m.setRange(0.01, 100.0)
-        self.edit_m.setSingleStep(0.1)
-        self.edit_m.setValue(1.0)
-        self.edit_m.setFixedHeight(22)
-        self.edit_m.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        add_row("m", self.edit_m, "sim.m.unit", "sim.m.help")
+        # m — ползунок (0.01-100)
+        self.edit_m = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.edit_m.setRange(1, 10000)
+        self.edit_m.setValue(1000)
+        self.edit_m.setTickPosition(QtWidgets.QSlider.TickPosition.NoTicks)
+        self.edit_m_label = QtWidgets.QLabel("1.0")
+        self.edit_m.sliderMoved.connect(lambda v: self.edit_m_label.setText(f"{v/1000:.2f}"))
+        self.edit_m.valueChanged.connect(lambda v: (self.edit_m_label.setText(f"{v/1000:.2f}"), self._on_settings_changed()))
+        add_slider_row("m", self.edit_m, self.edit_m_label, "sim.m.unit", "sim.m.help")
 
         self.check_collisions = WinCheckBox()
-        self.check_collisions.stateChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        self.check_collisions.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
+        self.check_collisions.stateChanged.connect(self._on_settings_changed)
+        self.check_collisions.setStyleSheet("font-size:13pt; color:#2c2c2c; margin-top:4px;")
         self.check_collisions.setChecked(True)
         sp_layout.addWidget(self.check_collisions)
 
         self.pot_box = QtWidgets.QComboBox()
-        self.pot_box.currentIndexChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        self.pot_box.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
-        add_row("pot", self.pot_box, "", "sim.pot.help")
+        self.pot_box.currentIndexChanged.connect(self._on_settings_changed)
+        add_combobox_row("pot", self.pot_box, "sim.pot.help")
 
-        self.edit_eps = QtWidgets.QDoubleSpinBox()
-        self.edit_eps.setRange(0.0, 100.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
-        self.edit_eps.setValue(10.0)
-        self.edit_eps.setFixedHeight(22)
-        self.edit_eps.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        add_row("eps", self.edit_eps, "sim.eps.unit", "sim.eps.help")
+        # eps, sigma, De, a, r0 — ползунки
+        self.edit_eps = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.edit_eps.setRange(0, 1000)
+        self.edit_eps.setValue(100)
+        self.edit_eps.setTickPosition(QtWidgets.QSlider.TickPosition.NoTicks)
+        self.edit_eps_label = QtWidgets.QLabel("10.0")
+        self.edit_eps.sliderMoved.connect(lambda v: self.edit_eps_label.setText(f"{v/10:.1f}"))
+        self.edit_eps.valueChanged.connect(lambda v: (self.edit_eps_label.setText(f"{v/10:.1f}"), self._on_settings_changed()))
+        add_slider_row("eps", self.edit_eps, self.edit_eps_label, "sim.eps.unit", "sim.eps.help")
 
-        self.edit_sigma = QtWidgets.QDoubleSpinBox()
-        self.edit_sigma.setRange(1.0, 30.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
-        self.edit_sigma.setValue(15.0)
-        self.edit_sigma.setFixedHeight(22)
-        self.edit_sigma.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        add_row("sigma", self.edit_sigma, "sim.sigma.unit", "sim.sigma.help")
+        self.edit_sigma = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.edit_sigma.setRange(10, 300)
+        self.edit_sigma.setValue(150)
+        self.edit_sigma.setTickPosition(QtWidgets.QSlider.TickPosition.NoTicks)
+        self.edit_sigma_label = QtWidgets.QLabel("15.0")
+        self.edit_sigma.sliderMoved.connect(lambda v: self.edit_sigma_label.setText(f"{v/10:.1f}"))
+        self.edit_sigma.valueChanged.connect(lambda v: (self.edit_sigma_label.setText(f"{v/10:.1f}"), self._on_settings_changed()))
+        add_slider_row("sigma", self.edit_sigma, self.edit_sigma_label, "sim.sigma.unit", "sim.sigma.help")
 
-        self.edit_De = QtWidgets.QDoubleSpinBox()
-        self.edit_De.setRange(0.0, 100.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
-        self.edit_De.setValue(20.0)
-        self.edit_De.setFixedHeight(22)
-        self.edit_De.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        add_row("De", self.edit_De, "sim.De.unit", "sim.De.help")
+        self.edit_De = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.edit_De.setRange(0, 1000)
+        self.edit_De.setValue(200)
+        self.edit_De.setTickPosition(QtWidgets.QSlider.TickPosition.NoTicks)
+        self.edit_De_label = QtWidgets.QLabel("20.0")
+        self.edit_De.sliderMoved.connect(lambda v: self.edit_De_label.setText(f"{v/10:.1f}"))
+        self.edit_De.valueChanged.connect(lambda v: (self.edit_De_label.setText(f"{v/10:.1f}"), self._on_settings_changed()))
+        add_slider_row("De", self.edit_De, self.edit_De_label, "sim.De.unit", "sim.De.help")
 
-        self.edit_a = QtWidgets.QDoubleSpinBox()
-        self.edit_a.setRange(0.01, 5.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
-        self.edit_a.setValue(0.5)
-        self.edit_a.setFixedHeight(22)
-        self.edit_a.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        add_row("a", self.edit_a, "sim.a.unit", "sim.a.help")
+        self.edit_a = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.edit_a.setRange(1, 500)
+        self.edit_a.setValue(50)
+        self.edit_a.setTickPosition(QtWidgets.QSlider.TickPosition.NoTicks)
+        self.edit_a_label = QtWidgets.QLabel("0.5")
+        self.edit_a.sliderMoved.connect(lambda v: self.edit_a_label.setText(f"{v/100:.2f}"))
+        self.edit_a.valueChanged.connect(lambda v: (self.edit_a_label.setText(f"{v/100:.2f}"), self._on_settings_changed()))
+        add_slider_row("a", self.edit_a, self.edit_a_label, "sim.a.unit", "sim.a.help")
 
-        self.edit_r0 = QtWidgets.QDoubleSpinBox()
-        self.edit_r0.setRange(1.0, 20.0)  # СКОРРЕКТИРОВАЛИ ДИАПАЗОН
-        self.edit_r0.setValue(2.5)
-        self.edit_r0.setFixedHeight(22)
-        self.edit_r0.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        add_row("r0", self.edit_r0, "sim.r0.unit", "sim.r0.help")
+        self.edit_r0 = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.edit_r0.setRange(10, 200)
+        self.edit_r0.setValue(25)
+        self.edit_r0.setTickPosition(QtWidgets.QSlider.TickPosition.NoTicks)
+        self.edit_r0_label = QtWidgets.QLabel("2.5")
+        self.edit_r0.sliderMoved.connect(lambda v: self.edit_r0_label.setText(f"{v/10:.1f}"))
+        self.edit_r0.valueChanged.connect(lambda v: (self.edit_r0_label.setText(f"{v/10:.1f}"), self._on_settings_changed()))
+        add_slider_row("r0", self.edit_r0, self.edit_r0_label, "sim.r0.unit", "sim.r0.help")
 
         self.vessel_box = QtWidgets.QComboBox()
-        self.vessel_box.addItems(["Прямоугольник", "Круг", "Многоугольник"])
-        self.vessel_box.currentIndexChanged.connect(self._on_vessel_changed)  # ОСОБАЯ ОБРАБОТКА
-        self.vessel_box.setFixedHeight(22)
-        self.vessel_box.setStyleSheet("font-size:12pt;color: black;")  # УВЕЛИЧИЛИ ШРИФТ
-        add_row("vessel", self.vessel_box, "", "sim.vessel.help")
+        self.vessel_box.currentIndexChanged.connect(self._on_vessel_changed)
+        add_combobox_row("vessel", self.vessel_box, "sim.vessel.help")
 
         self.spin_interact_step = QtWidgets.QSpinBox()
         self.spin_interact_step.setRange(1, 1000)
         self.spin_interact_step.setValue(1)
         self.spin_interact_step.setFixedHeight(22)
-        self.spin_interact_step.valueChanged.connect(self._on_settings_changed)  # ДИНАМИЧЕСКОЕ ИЗМЕНЕНИЕ
-        # add_row("interact", self.spin_interact_step, "sim.interact.unit", "")
+        self.spin_interact_step.valueChanged.connect(self._on_settings_changed)
 
-        # Добавляем спинбокс для количества бинов
         self.spin_bins = QtWidgets.QSpinBox()
         self.spin_bins.setRange(5, 100)
         self.spin_bins.setValue(self.bins_count)
-        self.spin_bins.setFixedHeight(22)
+        self.spin_bins.setFixedHeight(30)
         self.spin_bins.valueChanged.connect(self._on_bins_changed)
-        add_row("bins", self.spin_bins, "", "sim.bins.help")
+        add_combobox_row("bins", self.spin_bins, "sim.bins.help")
 
-        sp_layout.addSpacing(12)
+        sp_layout.addSpacing(6)
+
+        # создаём кнопки, но не добавляем в settings panel — они будут в верхней панели анимации
         self.btn_draw = QtWidgets.QPushButton()
         self.btn_draw.clicked.connect(self._enter_draw_mode)
-        self.btn_draw.setFixedHeight(22)  # УВЕЛИЧИЛИ ВЫСОТУ
-        self.btn_draw.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
-        sp_layout.addWidget(self.btn_draw)
+        self.btn_draw.setStyleSheet("""
+            QPushButton {
+                font-size:13pt; 
+                font-weight:600;
+                padding: 4px 8px;  
+                background: #5a8dba; 
+                color: white; 
+                border: none; 
+                border-radius: 4px;
+            }
+            QPushButton:hover { background: #4a7da8; }
+            QPushButton:pressed { background: #3a6d98; }
+            QPushButton:disabled { background: #cccccc; color: #666666; }
+        """)
 
         self.btn_clear = QtWidgets.QPushButton()
         self.btn_clear.clicked.connect(self._clear_poly)
-        self.btn_clear.setFixedHeight(22)  # УВЕЛИЧИЛИ ВЫСОТУ
-        self.btn_clear.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
-        sp_layout.addWidget(self.btn_clear)
-
-        # self.btn_show_distance = QtWidgets.QPushButton()
-        # self.btn_show_distance.clicked.connect(self._toggle_distance_display)
-        # self.btn_show_distance.setFixedHeight(22)
-        # self.btn_show_distance.setStyleSheet("font-size:11pt;")
-        # sp_layout.addWidget(self.btn_show_distance)
+        self.btn_clear.setStyleSheet("""
+            QPushButton {
+                font-size:13pt; 
+                font-weight:600;
+                padding: 4px 8px; 
+                background: #5a8dba; 
+                color: white; 
+                border: none; 
+                border-radius: 4px;
+            }
+            QPushButton:hover { background: #4a7da8; }
+            QPushButton:pressed { background: #3a6d98; }
+            QPushButton:disabled { background: #cccccc; color: #666666; }
+        """)
 
         self.btn_particle_select = QtWidgets.QPushButton()
         self.btn_particle_select.clicked.connect(self._toggle_particle_selection)
-        self.btn_particle_select.setFixedHeight(22)
-        self.btn_particle_select.setStyleSheet("font-size:11pt;")
-        sp_layout.addWidget(self.btn_particle_select)
+        self.btn_particle_select.setStyleSheet("""
+            QPushButton {
+                font-size:13pt; 
+                font-weight:600;
+                padding: 4px 8px;  
+                background: #6b8e7f; 
+                color: white; 
+                border: none; 
+                border-radius: 4px;
+            }
+            QPushButton:hover { background: #5b7e6f; }
+            QPushButton:pressed { background: #4b6e5f; }
+        """)
 
         self.btn_run = QtWidgets.QPushButton()
         self.btn_run.clicked.connect(self._toggle_run)
-        self.btn_run.setFixedHeight(22)  # УВЕЛИЧИЛИ ВЫСОТУ
-        self.btn_run.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
-        sp_layout.addWidget(self.btn_run)
+        self.btn_run.setStyleSheet("""
+            QPushButton {
+                font-size:13pt; 
+                font-weight:600;
+                padding: 4px 8px;
+                background: #a85c3c; 
+                color: white; 
+                border: none; 
+                border-radius: 4px;
+            }
+            QPushButton:hover { background: #984c2c; }
+            QPushButton:pressed { background: #883c1c; }
+        """)
 
         self.btn_reset_data = QtWidgets.QPushButton()
         self.btn_reset_data.clicked.connect(self._reset_data)
-        self.btn_reset_data.setFixedHeight(22)
-        sp_layout.addWidget(self.btn_reset_data)
+        self.btn_reset_data.setStyleSheet("""
+            QPushButton {
+                font-size:13pt; 
+                font-weight:600;
+                padding: 4px 8px;
+                background: #c97c4c; 
+                color: white; 
+                border: none; 
+                border-radius: 4px;
+            }
+            QPushButton:hover { background: #b96c3c; }
+            QPushButton:pressed { background: #a95c2c; }
+        """)
 
         self.btn_back = QtWidgets.QPushButton()
         self.btn_back.clicked.connect(self.back_cb)
-        self.btn_back.setFixedHeight(22)  # УВЕЛИЧИЛИ ВЫСОТУ
-        self.btn_back.setStyleSheet("font-size:12pt;")  # УВЕЛИЧИЛИ ШРИФТ
+        self.btn_back.setFixedHeight(25)
+        self.btn_back.setStyleSheet("""
+            QPushButton {
+                font-size:13pt; 
+                font-weight:600;
+                background: #313132; 
+                color: white; 
+                border: none; 
+                border-radius: 4px;
+            }
+            QPushButton:hover { background: #413132; }
+            QPushButton:pressed { background: #211112; }
+        """)
         sp_layout.addStretch(1)
         sp_layout.addWidget(self.btn_back)
 
@@ -1197,18 +1377,44 @@ class SimulationWidget(QtWidgets.QWidget):
         # Верхняя панель для анимации
         top_bar = QtWidgets.QHBoxLayout()
         self.btn_toggle_settings_small = QtWidgets.QPushButton()
-        self.btn_toggle_settings_small.setFixedSize(110, 28)
-        self.btn_toggle_settings_small.setStyleSheet("font-size:12pt;")
+        self.btn_toggle_settings_small.setFixedSize(110, 30)
+        self.btn_toggle_settings_small.setStyleSheet("""
+            QPushButton {
+                font-size:13pt; 
+                font-weight:600;
+                background: #5a8dba; 
+                color: white; 
+                border: none; 
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background: #4a7da8;
+            }
+        """)
         self.btn_toggle_settings_small.clicked.connect(self._toggle_settings)
         top_bar.addWidget(self.btn_toggle_settings_small, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
+
+        top_bar.addSpacing(6)
+        self.btn_draw.setFixedSize(110, 30)
+        top_bar.addWidget(self.btn_draw)
+        self.btn_clear.setFixedSize(110, 30)
+        top_bar.addWidget(self.btn_clear)
+        self.btn_particle_select.setFixedSize(110, 30)
+        top_bar.addWidget(self.btn_particle_select)
+        self.btn_run.setFixedSize(110, 30)
+        top_bar.addWidget(self.btn_run)
+        self.btn_reset_data.setFixedSize(110, 30)
+        top_bar.addWidget(self.btn_reset_data)
         top_bar.addStretch(1)
         anim_container.addLayout(top_bar)
 
-        self.fig_anim = plt.Figure(figsize=(6, 6))
+        self.fig_anim = plt.Figure(figsize=(8, 8))
         self.ax_anim = self.fig_anim.add_subplot(111)
         self.ax_anim.set_xticks([])
         self.ax_anim.set_yticks([])
         self.ax_anim.set_aspect('equal')
+        self.ax_anim.set_facecolor('#ffffff')
+        self.fig_anim.patch.set_facecolor('#ffffff')
         self.canvas_anim = FigureCanvas(self.fig_anim)
         self.canvas_anim.setMinimumSize(600, 600)
         anim_container.addWidget(self.canvas_anim)
@@ -1217,20 +1423,17 @@ class SimulationWidget(QtWidgets.QWidget):
         # Верхняя панель для гистограмм с кнопкой переключения режима
         hist_top_bar = QtWidgets.QHBoxLayout()
 
-        # Заголовок гистограмм
-        hist_title = QtWidgets.QLabel("Гистограммы")
-        hist_title.setStyleSheet("font-size:14pt; font-weight:bold;")
-        hist_top_bar.addWidget(hist_title)
+        self.hist_title = QtWidgets.QLabel()
+        self.hist_title.setStyleSheet("font-size:17pt; font-weight:bold; color:#1a1a1a;")
+        hist_top_bar.addWidget(self.hist_title)
 
-        hist_top_bar.addStretch(1)
-
-        # Кнопка переключения режима графика (теперь рядом с графиком)
         self.btn_switch_display_mode = QtWidgets.QPushButton()
         self.btn_switch_display_mode.clicked.connect(self._switch_display_mode)
-        self.btn_switch_display_mode.setFixedSize(180, 28)
+        self.btn_switch_display_mode.setFixedSize(170, 28)
         self.btn_switch_display_mode.setStyleSheet("""
             QPushButton {
                 font-size:11pt; 
+                font-weight:600;
                 background: #ab9d98; 
                 color: white; 
                 border: none; 
@@ -1251,7 +1454,9 @@ class SimulationWidget(QtWidgets.QWidget):
         self.fig_hist, axes = plt.subplots(3, 1, figsize=(5, 8))
         for ax in axes:
             ax.tick_params(labelsize=9)
+            ax.set_facecolor('#f9f9f9')
         self.ax_histx, self.ax_histy, self.ax_histd = axes
+        self.fig_hist.patch.set_facecolor('#ffffff')
         self.fig_hist.tight_layout()
         self.canvas_hist = FigureCanvas(self.fig_hist)
         self.canvas_hist.setMinimumSize(400, 600)
@@ -1260,16 +1465,16 @@ class SimulationWidget(QtWidgets.QWidget):
         self.draw_mode = False
         self.poly_points = []
 
-        # Изначально обновляем состояние кнопок
         self._update_polygon_buttons_state()
         self._update_display_mode_button()
+        # self._update_system_buttons_texts()
 
     def _update_reset_buttons(self):
         """Обновление текста кнопок сброса"""
         lang = self.get_lang_cb()
         s = STRINGS[lang.value]
 
-        self.btn_reset_data.setText(s.get("sim.btn.reset_data", "Сбросить данные"))
+        self.btn_reset_data.setText(s.get("sim.btn.reset_data", "Сбросить"))
 
         # Добавляем всплывающие подсказки
         self.btn_reset_data.setToolTip(
@@ -1319,7 +1524,7 @@ class SimulationWidget(QtWidgets.QWidget):
         }
 
         # Очищаем выбор частиц
-        self.selected_particles = []
+        # self.selected_particles = []
 
         # Удаляем линию расстояния
         if self.distance_line:
@@ -1348,13 +1553,13 @@ class SimulationWidget(QtWidgets.QWidget):
         s = STRINGS[lang.value]
 
         if self.distance_display_mode == 0:
-            self.btn_switch_display_mode.setText("Обычное расстояние")
+            self.btn_switch_display_mode.setText(s.get("sim.display_mode.distance", "Расстояние"))
             self.btn_switch_display_mode.setToolTip("Показать обычное евклидово расстояние между частицами")
         elif self.distance_display_mode == 1:
-            self.btn_switch_display_mode.setText("Проекции X/Y")
+            self.btn_switch_display_mode.setText(s.get("sim.display_mode.projections", "Проекции X/Y"))
             self.btn_switch_display_mode.setToolTip("Показать проекции расстояния по осям X и Y")
         else:  # mode 2
-            self.btn_switch_display_mode.setText("Расстояние со знаком")
+            self.btn_switch_display_mode.setText(s.get("sim.display_mode.signed", "Расстояние со знаком"))
             self.btn_switch_display_mode.setToolTip("Показать ориентированное расстояние со знаком")
 
     def _toggle_distance_display(self):
@@ -1415,7 +1620,6 @@ class SimulationWidget(QtWidgets.QWidget):
         self._update_histograms()
 
     def _on_settings_changed(self):
-
         if not (hasattr(self, 'system') and self.system is not None):
             return
 
@@ -1423,7 +1627,6 @@ class SimulationWidget(QtWidgets.QWidget):
         old_N = self.system.N
         old_temp = self.system.temp
         old_mass = self.system.mass
-        old_R = self.system.radius
         old_collisions = self.system.enable_collisions
         old_interact_step = self.system.interaction_step
         old_kind = self.system.params.kind
@@ -1432,31 +1635,33 @@ class SimulationWidget(QtWidgets.QWidget):
         old_De = self.system.params.De
         old_a = self.system.params.a
         old_r0 = self.system.params.r0
+        old_vessel_key = self._vessel_kind_to_key(getattr(self.system.vessel, "kind", ""))
 
-        # новые значения из виджетов
+        # новые значения из ползунков
         new_N = int(self.spin_N.value())
-        new_R = float(self.edit_R.value())
-        new_temp = float(self.edit_T.value())
-        new_mass = float(self.edit_m.value())
+        new_temp = float(self.edit_T.value()) / 10.0
+        new_mass = float(self.edit_m.value()) / 1000.0
 
         self.system.N = new_N
-        self.system.radius = new_R
-        self.system.visual_radius = new_R
         self.system.temp = new_temp
         self.system.mass = new_mass
         self.system.enable_collisions = self.check_collisions.isChecked()
         self.system.interaction_step = int(self.spin_interact_step.value())
 
         self.system.params.kind = str(self.pot_box.currentText())
-        self.system.params.epsilon = float(self.edit_eps.value())
-        self.system.params.sigma = float(self.edit_sigma.value())
-        self.system.params.De = float(self.edit_De.value())
-        self.system.params.a = float(self.edit_a.value())
-        self.system.params.r0 = float(self.edit_r0.value())
+        self.system.params.epsilon = float(self.edit_eps.value()) / 10.0
+        self.system.params.sigma = float(self.edit_sigma.value()) / 10.0
+        self.system.params.De = float(self.edit_De.value()) / 10.0
+        self.system.params.a = float(self.edit_a.value()) / 100.0
+        self.system.params.r0 = float(self.edit_r0.value()) / 10.0
 
-        # если изменилось N — полная переинициализация (там уже есть сброс гистограмм)
-        if new_N != old_N:
-            self._reinitialize_system()
+        new_vessel_key = self._vessel_display_to_key(str(self.vessel_box.currentText()))
+
+        self._sanitize_selected_particles()
+
+        if new_N != old_N or new_vessel_key != old_vessel_key:
+            reset_hist = (new_vessel_key != old_vessel_key)
+            self._reinitialize_system(reset_hist=reset_hist)
             return
 
         # флаги изменений
@@ -1464,7 +1669,6 @@ class SimulationWidget(QtWidgets.QWidget):
         changed_mass = (new_mass != old_mass)
 
         other_changed = (
-            new_R != old_R or
             self.system.enable_collisions != old_collisions or
             self.system.interaction_step != old_interact_step or
             self.system.params.kind != old_kind or
@@ -1487,9 +1691,6 @@ class SimulationWidget(QtWidgets.QWidget):
             if den > 0:
                 scale = math.sqrt(num / den)
                 self.system.vel *= scale
-
-        # обновляем отрисовку частиц
-        self._update_particle_visualization()
 
     def _on_vessel_changed(self):
         # Особая обработка изменения типа сосуда
@@ -1514,40 +1715,39 @@ class SimulationWidget(QtWidgets.QWidget):
         self.btn_draw.setEnabled(is_polygon_mode)
         self.btn_clear.setEnabled(is_polygon_mode)
 
-        # Визуальная индикация отключенного состояния
-        if not is_polygon_mode:
-            self.btn_draw.setStyleSheet("font-size:12pt; background-color: #cccccc; color: #666666;")
-            self.btn_clear.setStyleSheet("font-size:12pt; background-color: #cccccc; color: #666666;")
-        else:
-            self.btn_draw.setStyleSheet("font-size:12pt;")
-            self.btn_clear.setStyleSheet("font-size:12pt;")
-
-    def _reinitialize_system(self):
-        """Полная переинициализация системы с текущими настройками"""
+    def _reinitialize_system(self, reset_hist: bool = False):
+        """Полная переинициализация системы с текущими настройками."""
         N = int(self.spin_N.value())
-        radius = float(self.edit_R.value())
-        temp = float(self.edit_T.value())
+        radius = 3
+        temp = float(self.edit_T.value()) / 10.0
         dt = 0.1
-        mass = float(self.edit_m.value())
+        mass = float(self.edit_m.value()) / 1000.0
         enable_collisions = self.check_collisions.isChecked()
         interaction_step = int(self.spin_interact_step.value())
         pot_params = PotentialParams(
             kind=str(self.pot_box.currentText()),
-            epsilon=float(self.edit_eps.value()),
-            sigma=float(self.edit_sigma.value()),
-            De=float(self.edit_De.value()),
-            a=float(self.edit_a.value()),
-            r0=float(self.edit_r0.value()),
+            epsilon=float(self.edit_eps.value()) / 10.0,
+            sigma=float(self.edit_sigma.value()) / 10.0,
+            De=float(self.edit_De.value()) / 10.0,
+            a=float(self.edit_a.value()) / 100.0,
+            r0=float(self.edit_r0.value()) / 10.0,
         )
-        vessel_kind = str(self.vessel_box.currentText())
-        poly = self.system.vessel.poly if vessel_kind in ("poly", "Многоугольник") else None
+        
+        vessel_key = self._vessel_display_to_key(str(self.vessel_box.currentText()))
+        poly = self.system.vessel.poly if self._vessel_kind_to_key(getattr(self.system.vessel, "kind", "")) in ("poly", 'Многоугольник') else None
 
         # Сбрасываем накопленные данные при изменении параметров
         self._reset_hist_data()
 
-        self._init_simulation(N=N, radius=radius, temp=temp, dt=dt, vessel_kind=vessel_kind, poly=poly,
-                              potential_params=pot_params, mass=mass, enable_collisions=enable_collisions,
-                              interaction_step=interaction_step)
+        self._init_simulation(N=N, radius=radius, temp=temp, dt=dt, vessel_kind=vessel_key, poly=poly,
+                            potential_params=pot_params, mass=mass, enable_collisions=enable_collisions,
+                            interaction_step=interaction_step)
+        
+        # Если был включен режим выбора и есть хотя бы 2 частицы, выбираем две случайные
+        if self.particle_selection_mode and self.system.n() >= 2:
+            self.selected_particles = np.random.choice(self.system.n(), 2, replace=False).tolist()
+            self._update_distance_display()
+            self._redraw_particles()
 
     def _update_selected_particles_histograms(self):
         """Обновление гистограмм только для выбранных частиц"""
@@ -1605,13 +1805,13 @@ class SimulationWidget(QtWidgets.QWidget):
             self.ax_histx.hist(self.selected_particles_data['x'], bins=self.bins_count, density=True,
                                color="#8bb7d7", alpha=0.8)
         self.ax_histx.set_ylabel("p(x)", labelpad=5, fontsize=12)
-        self.ax_histx.set_title(f"{s['sim.hist.x']} (выбранные)", fontsize=12, fontweight='bold')
+        self.ax_histx.set_title(f"{s['sim.hist.x']}", fontsize=12, fontweight='bold')
 
         if len(self.selected_particles_data['y']) > 0:
             self.ax_histy.hist(self.selected_particles_data['y'], bins=self.bins_count, density=True,
                                color="#f9ad6c", alpha=0.8)
         self.ax_histy.set_ylabel("p(y)", labelpad=5, fontsize=12)
-        self.ax_histy.set_title(f"{s['sim.hist.y']} (выбранные)", fontsize=12, fontweight='bold')
+        self.ax_histy.set_title(f"{s['sim.hist.y']}", fontsize=12, fontweight='bold')
 
         # Разные режимы отображения для третьего графика
         if self.distance_display_mode == 0:  # Обычное расстояние
@@ -1620,7 +1820,7 @@ class SimulationWidget(QtWidgets.QWidget):
                                    color="#8dd38d", alpha=0.85)
             self.ax_histd.set_ylabel("p(r)", labelpad=5, fontsize=12)
             self.ax_histd.set_xlabel("r", fontsize=12)
-            self.ax_histd.set_title(f"{s['sim.hist.r']} (выбранные)", fontsize=12, fontweight='bold')
+            self.ax_histd.set_title(f"{s['sim.hist.r']}", fontsize=12, fontweight='bold')
 
         elif self.distance_display_mode == 1:  # Проекции
             # Показываем проекции dx и dy на одном графике
@@ -1636,7 +1836,7 @@ class SimulationWidget(QtWidgets.QWidget):
 
             self.ax_histd.set_ylabel("p(Δ)", labelpad=5, fontsize=12)
             self.ax_histd.set_xlabel("Δ", fontsize=12)
-            self.ax_histd.set_title("Проекции расстояния (выбранные)", fontsize=12, fontweight='bold')
+            self.ax_histd.set_title(s.get("sim.display_mode.projections", "Проекции расстояния"), fontsize=12, fontweight='bold')
 
             # Добавляем легенду только если есть данные
             if has_dx or has_dy:
@@ -1647,17 +1847,20 @@ class SimulationWidget(QtWidgets.QWidget):
                 self.ax_histd.hist(self.selected_particles_data['signed_distance'], bins=self.bins_count, density=True,
                                    color="#8d6e63", alpha=0.85)
             self.ax_histd.set_ylabel("p(rₛ)", labelpad=5, fontsize=12)
-            self.ax_histd.set_xlabel("rₛ (со знаком)", fontsize=12)
-            self.ax_histd.set_title("Расстояние со знаком (выбранные)", fontsize=12, fontweight='bold')
+            self.ax_histd.set_xlabel("rₛ", fontsize=12)
+            self.ax_histd.set_title(s.get("sim.display_mode.signed", "Расстояние со знаком"), fontsize=12, fontweight='bold')
             # Добавляем вертикальную линию в нуле
             self.ax_histd.axvline(x=0, color='red', linestyle='--', alpha=0.7)
 
     def _update_particle_visualization(self):
         """Обновляет визуализацию частиц без пересоздания системы"""
+        # удаляем старые арты и заново создаём круги, чтобы избежать рассинхрона по числу частиц
         if hasattr(self, 'particle_circles'):
             for c in self.particle_circles:
-                c.remove()
-
+                try:
+                    c.remove()
+                except Exception:
+                    pass
         self.particle_circles = []
         if self.system.pos is not None:
             for i in range(self.system.n()):
@@ -1727,7 +1930,15 @@ class SimulationWidget(QtWidgets.QWidget):
 
     def _redraw_particles(self):
         if hasattr(self, 'particle_circles') and self.system.pos is not None:
-            for i, circle in enumerate(self.particle_circles):
+            # sanitize selection before use
+            self._sanitize_selected_particles()
+            if self.system.n() == 0:
+                return
+            n_circles = len(self.particle_circles)
+            n_pos = self.system.n()
+            n_iter = min(n_circles, n_pos)
+            for i in range(n_iter):
+                circle = self.particle_circles[i]
                 circle.center = (self.system.pos[i, 0], self.system.pos[i, 1])
 
                 # Подсвечиваем выбранные частицы (всегда, если они выбраны)
@@ -1748,6 +1959,9 @@ class SimulationWidget(QtWidgets.QWidget):
             if current_time - self._last_canvas_update > 0.033:
                 self.canvas_anim.draw_idle()
                 self._last_canvas_update = current_time
+        else:
+            # если рассинхрон (нет кругов) — создаём визуализацию заново
+            self._update_particle_visualization()
 
     def _update_histograms(self):
         """Обновление гистограмм с учетом выбранных частиц"""
@@ -1757,6 +1971,13 @@ class SimulationWidget(QtWidgets.QWidget):
             ax.set_facecolor("#f9f9f9")
             ax.grid(True, linestyle='--', alpha=0.3)
             ax.tick_params(labelsize=9)
+        # Добавляем проверку на пустую систему
+        if self.system is None or self.system.pos is None or self.system.n() == 0:
+            self.canvas_hist.draw_idle()
+            return
+            
+        # sanitize selected indices before histogram updates
+        self._sanitize_selected_particles()
 
         lang = self.get_lang_cb()
         s = STRINGS[lang.value]
@@ -1826,13 +2047,13 @@ class SimulationWidget(QtWidgets.QWidget):
             self.ax_histx.hist(self.selected_particles_data['x'], bins=self.bins_count, density=True,
                                color="#8bb7d7", alpha=0.8)
         self.ax_histx.set_ylabel("p(x)", labelpad=5, fontsize=12)
-        self.ax_histx.set_title(f"{s['sim.hist.x']} (выбранные)", fontweight='bold')
+        self.ax_histx.set_title(f"{s['sim.hist.x']}", fontsize=12, fontweight='bold')
 
         if len(self.selected_particles_data['y']) > 0:
             self.ax_histy.hist(self.selected_particles_data['y'], bins=self.bins_count, density=True,
                                color="#f9ad6c", alpha=0.8)
         self.ax_histy.set_ylabel("p(y)", labelpad=5, fontsize=12)
-        self.ax_histy.set_title(f"{s['sim.hist.y']} (выбранные)", fontweight='bold')
+        self.ax_histy.set_title(f"{s['sim.hist.y']}", fontsize=12, fontweight='bold')
 
         # Разные режимы отображения для третьего графика
         if self.distance_display_mode == 0:  # Обычное расстояние
@@ -1841,33 +2062,42 @@ class SimulationWidget(QtWidgets.QWidget):
                                    color="#8dd38d", alpha=0.85)
             self.ax_histd.set_ylabel("p(r)", labelpad=5, fontsize=12)
             self.ax_histd.set_xlabel("r", fontsize=12)
-            self.ax_histd.set_title(f"{s['sim.hist.r']}", fontweight='bold')
+            self.ax_histd.set_title(f"{s['sim.hist.r']}", fontsize=12, fontweight='bold')
 
         elif self.distance_display_mode == 1:  # Проекции
             # Показываем проекции dx и dy на одном графике
-            if len(self.selected_particles_data['dx']) > 0:
+            has_dx = len(self.selected_particles_data['dx']) > 0
+            has_dy = len(self.selected_particles_data['dy']) > 0
+
+            if has_dx:
                 self.ax_histd.hist(self.selected_particles_data['dx'], bins=self.bins_count, density=True,
                                    color="#8dd38d", alpha=0.6, label="Δx")
-            if len(self.selected_particles_data['dy']) > 0:
+            if has_dy:
                 self.ax_histd.hist(self.selected_particles_data['dy'], bins=self.bins_count, density=True,
                                    color="#8bb7d7", alpha=0.6, label="Δy")
+
             self.ax_histd.set_ylabel("p(Δ)", labelpad=5, fontsize=12)
             self.ax_histd.set_xlabel("Δ", fontsize=12)
-            self.ax_histd.set_title("Проекции расстояния", fontweight='bold')
-            self.ax_histd.legend()
+            self.ax_histd.set_title(s.get("sim.display_mode.projections", "Проекции расстояния"), fontsize=12, fontweight='bold')
+
+            # Добавляем легенду только если есть данные
+            if has_dx or has_dy:
+                self.ax_histd.legend()
 
         else:  # Расстояние со знаком
             if len(self.selected_particles_data['signed_distance']) > 0:
                 self.ax_histd.hist(self.selected_particles_data['signed_distance'], bins=self.bins_count, density=True,
                                    color="#8d6e63", alpha=0.85)
             self.ax_histd.set_ylabel("p(rₛ)", labelpad=5, fontsize=12)
-            self.ax_histd.set_xlabel("rₛ (со знаком)", fontsize=12)
-            self.ax_histd.set_title("Расстояние со знаком", fontweight='bold')
+            self.ax_histd.set_xlabel("rₛ", fontsize=12)
+            self.ax_histd.set_title(s.get("sim.display_mode.signed", "Расстояние со знаком"), fontsize=12, fontweight='bold')
             # Добавляем вертикальную линию в нуле
             self.ax_histd.axvline(x=0, color='red', linestyle='--', alpha=0.7)
 
     def _update_all_particles_histograms(self):
         """Обновление гистограмм для всех частиц"""
+        # sanitize selected indices to avoid OOB access when N changed rapidly
+        self._sanitize_selected_particles()
         # Накопление данных о текущих позициях
         current_x = self.system.pos[:, 0]
         current_y = self.system.pos[:, 1]
@@ -1938,14 +2168,14 @@ class SimulationWidget(QtWidgets.QWidget):
 
             if has_dx:
                 self.ax_histd.hist(self.accumulated_dx, bins=self.bins_count, density=True,
-                                   color="#8dd38d", alpha=0.6, label="Δx")
+                                   color="#FF6B6B", alpha=0.6, label="Δx")
             if has_dy:
                 self.ax_histd.hist(self.accumulated_dy, bins=self.bins_count, density=True,
-                                   color="#8bb7d7", alpha=0.6, label="Δy")
+                                   color="#4ECDC4", alpha=0.6, label="Δy")
 
             self.ax_histd.set_ylabel("p(Δ)", labelpad=5)
             self.ax_histd.set_xlabel("Δ")
-            self.ax_histd.set_title("Проекции расстояния (все частицы)", fontsize=10, fontweight='bold')
+            self.ax_histd.set_title(s.get("sim.display_mode.projections", "Проекции расстояния"), fontsize=10, fontweight='bold')
 
             # Добавляем легенду только если есть данные
             if has_dx or has_dy:
@@ -1956,8 +2186,8 @@ class SimulationWidget(QtWidgets.QWidget):
                 self.ax_histd.hist(self.accumulated_signed, bins=self.bins_count, density=True,
                                    color="#8d6e63", alpha=0.85)
             self.ax_histd.set_ylabel("p(rₛ)", labelpad=5)
-            self.ax_histd.set_xlabel("rₛ (со знаком)")
-            self.ax_histd.set_title("Расстояние со знаком (все частицы)", fontsize=10, fontweight='bold')
+            self.ax_histd.set_xlabel("rₛ")
+            self.ax_histd.set_title(s.get("sim.display_mode.signed", "Расстояние со знаком"), fontsize=10, fontweight='bold')
             # Добавляем вертикальную линию в нуле
             self.ax_histd.axvline(x=0, color='red', linestyle='--', alpha=0.7)
 
@@ -2031,7 +2261,7 @@ class SimulationWidget(QtWidgets.QWidget):
         return distances
 
     def _compute_sampled_distances(self, sample_size):
-        """Вычисляет расстояния для случайной выборки пар частиц"""
+        """Вычисляет расстояния для случайной выборка пар частиц"""
         N = self.system.n()
         if N < 2:
             return np.array([])
@@ -2080,15 +2310,17 @@ class SimulationWidget(QtWidgets.QWidget):
             self.settings_panel.show()
 
     def _enter_draw_mode(self):
-        vessel_kind = str(self.vessel_box.currentText())
-        if vessel_kind in ("poly", "Многоугольник"):
+        # проверяем по каноническому ключу текущий выбранный сосуд
+        v_k = self._vessel_display_to_key(str(self.vessel_box.currentText()))
+        if v_k in ('poly', 'Многоугольник'):
             self.draw_mode = True
             self.poly_points = []
 
     def _clear_poly(self):
-        vessel_kind = str(self.vessel_box.currentText())
-        if vessel_kind in ("poly", "Многоугольник"):
+        # очищаем полигон только если мы в режиме poly (канонический ключ)
+        if self._vessel_display_to_key(str(self.vessel_box.currentText())) in ('poly', 'Многоугольник'):
             self.system.vessel.poly = None
+            # сохраняем kind как poly/rect/circle — не меняем здесь
             self._draw_vessel_patch()
             self.canvas_anim.draw_idle()
 
@@ -2102,8 +2334,8 @@ class SimulationWidget(QtWidgets.QWidget):
             return
 
         # Остальная логика для рисования полигонов
-        vessel_kind = str(self.vessel_box.currentText())
-        if not self.draw_mode or vessel_kind not in ("poly", "Многоугольник"):
+        v_k = self._vessel_display_to_key(str(self.vessel_box.currentText()))
+        if not self.draw_mode or v_k != "poly":
             return
 
         if event.button == 1:
@@ -2112,6 +2344,8 @@ class SimulationWidget(QtWidgets.QWidget):
         elif event.button == 3:
             if len(self.poly_points) >= 3:
                 self.system.vessel.poly = np.array(self.poly_points)
+                # сохраняем канонический тип у сосудa
+                self.system.vessel.kind = "poly"
                 self.draw_mode = False
                 self.poly_points = []
                 self._draw_vessel_patch()
@@ -2202,17 +2436,19 @@ class SimulationWidget(QtWidgets.QWidget):
             except Exception:
                 pass
         v = self.system.vessel
-        if v.kind in ("rect", "Прямоугольник"):
+        # приводим kind к каноническому ключу
+        vk = self._vessel_kind_to_key(getattr(v, "kind", ""))
+        if vk == "rect":
             xmin, ymin, xmax, ymax = v.rect
             self.vessel_artist = patches.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, lw=2, ec="#444")
             self.ax_anim.set_xlim(xmin - 10, xmax + 10)
             self.ax_anim.set_ylim(ymin - 10, ymax + 10)
-        elif v.kind in ("circle", "Круг"):
+        elif vk == "circle":
             cx, cy, R = v.circle
             self.vessel_artist = patches.Circle((cx, cy), R, fill=False, lw=2, ec="#444")
             self.ax_anim.set_xlim(cx - R - 10, cx + R + 10)
             self.ax_anim.set_ylim(cy - R - 10, cy + R + 10)
-        elif v.kind in ("poly", "Многоугольник") and v.poly is not None:
+        elif vk in ('poly', 'Многоугольник') and v.poly is not None:
             self.vessel_artist = patches.Polygon(v.poly, closed=True, fill=False, lw=2, ec="#444")
             xmin, ymin = v.poly.min(axis=0)
             xmax, ymax = v.poly.max(axis=0)
@@ -2232,9 +2468,7 @@ class SimulationWidget(QtWidgets.QWidget):
             w = self.findChild(QtWidgets.QLabel, obj_name)
             if w: w.setText(STRINGS[lang.value].get(text_key, ""))
 
-        hist_title = self.findChild(QtWidgets.QLabel)
-        if hist_title:
-            hist_title.setText("Гистограммы")
+        self.hist_title.setText(s.get("sim.histograms.title", "Гистограммы"))
 
         # Обновляем кнопку переключения режима
         self._update_display_mode_button()
@@ -2291,7 +2525,7 @@ class SimulationWidget(QtWidgets.QWidget):
         self.canvas_anim.draw_idle()
 
         # Обновляем названия потенциалов
-        current_index = self.pot_box.currentIndex()
+        current_index = max(0, self.pot_box.currentIndex())
         if lang == Lang.RU:
             self.pot_box.clear()
             self.pot_box.addItems(["Нет", "Отталкивание", "Притяжение", "Леннард-Джонс", "Морзе"])
@@ -2304,7 +2538,7 @@ class SimulationWidget(QtWidgets.QWidget):
         self.pot_box.setCurrentIndex(current_index)
 
         # Обновляем названия сосудов
-        current_vessel_index = self.vessel_box.currentIndex()
+        current_vessel_index = max(0, self.vessel_box.currentIndex())
         self.vessel_box.clear()
         self.vessel_box.addItems([
             s["vessel.rect"],
@@ -2353,7 +2587,7 @@ class AuthorsWidget(QtWidgets.QWidget):
         left = QtWidgets.QVBoxLayout()
         left.addSpacing(80)
         left.setSpacing(6)  # 🔹 уменьшили расстояние между текстом и фото
-        left.setContentsMargins(0, 0, 0, 0)  # 🔹 убрали внутренние поля
+        left.setContentsMargins(3, 0, 3, 0)  # 🔹 убрали внутренние поля
 
         self.name1_label = QtWidgets.QLabel()
         self.name1_label.setStyleSheet("font-size:16pt; font-weight:600;")
@@ -2374,7 +2608,7 @@ class AuthorsWidget(QtWidgets.QWidget):
         right = QtWidgets.QVBoxLayout()
         right.addSpacing(80)
         right.setSpacing(6)  # 🔹 уменьшили расстояние между текстом и фото
-        right.setContentsMargins(0, 0, 0, 0)  # 🔹 убрали внутренние поля
+        right.setContentsMargins(3, 0, 3, 0)  # 🔹 убрали внутренние поля
 
         self.name2_label = QtWidgets.QLabel()
         self.name2_label.setStyleSheet("font-size:16pt; font-weight:600;")
