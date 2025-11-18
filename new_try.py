@@ -842,7 +842,7 @@ class MainMenuWidget(QtWidgets.QWidget):
 
     def _build_ui(self):
         layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(40, 40, 40, 40)
+        layout.setContentsMargins(60, 60, 60, 60)
 
         left = QtWidgets.QVBoxLayout()
         center = QtWidgets.QVBoxLayout()
@@ -1069,13 +1069,13 @@ class SimulationWidget(QtWidgets.QWidget):
         self.settings_panel.setFixedWidth(300)
         self.settings_panel.setStyleSheet("background:#f0f0f2; border-right: 2px solid #ddd;")
         sp_layout = QtWidgets.QVBoxLayout(self.settings_panel)
-        sp_layout.setContentsMargins(11, 11, 11, 11)
-        sp_layout.setSpacing(6)
+        sp_layout.setContentsMargins(8, 8, 8, 8)
+        sp_layout.setSpacing(4)
 
         self.lbl_settings_title = QtWidgets.QLabel()
         self.lbl_settings_title.setStyleSheet("font-size:17pt; font-weight:700; color:#1a1a1a;")
         sp_layout.addWidget(self.lbl_settings_title)
-        sp_layout.addSpacing(6)
+        sp_layout.addSpacing(4)
 
         def add_slider_row(key_label, slider, label_value, key_unit="", key_help=""):
             """Компактная строка для слайдера: [Label] [Slider] [Value] [Unit]"""
@@ -1087,7 +1087,7 @@ class SimulationWidget(QtWidgets.QWidget):
                 sp_layout.addWidget(h)
             
             row = QtWidgets.QHBoxLayout()
-            row.setContentsMargins(3, 0, 3, 0)
+            row.setContentsMargins(2, 0, 2, 0)
             row.setSpacing(4)
             
             lbl = QtWidgets.QLabel()
@@ -1137,7 +1137,7 @@ class SimulationWidget(QtWidgets.QWidget):
                 sp_layout.addWidget(h)
             
             row = QtWidgets.QHBoxLayout()
-            row.setContentsMargins(3, 0, 3, 0)
+            row.setContentsMargins(2, 0, 2, 0)
             row.setSpacing(4)
             
             lbl = QtWidgets.QLabel()
@@ -1416,7 +1416,7 @@ class SimulationWidget(QtWidgets.QWidget):
         self.ax_anim.set_facecolor('#ffffff')
         self.fig_anim.patch.set_facecolor('#ffffff')
         self.canvas_anim = FigureCanvas(self.fig_anim)
-        self.canvas_anim.setMinimumSize(600, 600)
+        self.canvas_anim.setMinimumSize(650, 650)
         anim_container.addWidget(self.canvas_anim)
         self.canvas_anim.mpl_connect("button_press_event", self._on_mouse)
 
@@ -1451,7 +1451,7 @@ class SimulationWidget(QtWidgets.QWidget):
 
         hist_container.addLayout(hist_top_bar)
 
-        self.fig_hist, axes = plt.subplots(3, 1, figsize=(5, 8))
+        self.fig_hist, axes = plt.subplots(3, 1, figsize=(6, 8))
         for ax in axes:
             ax.tick_params(labelsize=9)
             ax.set_facecolor('#f9f9f9')
@@ -1561,26 +1561,6 @@ class SimulationWidget(QtWidgets.QWidget):
         else:  # mode 2
             self.btn_switch_display_mode.setText(s.get("sim.display_mode.signed", "Расстояние со знаком"))
             self.btn_switch_display_mode.setToolTip("Показать ориентированное расстояние со знаком")
-
-    def _toggle_distance_display(self):
-        """Включение/выключение режима показа расстояния между частицами"""
-        self.show_distance = not self.show_distance
-        lang = self.get_lang_cb()
-        s = STRINGS[lang.value]
-
-        if self.show_distance:
-            self.btn_show_distance.setText(s.get("sim.btn.hide_distance", "Скрыть расстояние"))
-            # Очищаем предыдущий выбор
-            self.selected_particles = []
-        else:
-            self.btn_show_distance.setText(s.get("sim.btn.show_distance", "Показать расстояние"))
-            # Удаляем линию расстояния
-            if self.distance_line:
-                self.distance_line.remove()
-                self.distance_line = None
-            self.selected_particles = []
-
-        self.canvas_anim.draw_idle()
 
     def _toggle_particle_selection(self):
         """Включение/выключение режима выбора частиц"""
@@ -1829,10 +1809,10 @@ class SimulationWidget(QtWidgets.QWidget):
 
             if has_dx:
                 self.ax_histd.hist(self.selected_particles_data['dx'], bins=self.bins_count, density=True,
-                                   color="#8dd38d", alpha=0.6, label="Δx")
+                                   color="#FF6B6B", alpha=0.6, label="Δx")
             if has_dy:
                 self.ax_histd.hist(self.selected_particles_data['dy'], bins=self.bins_count, density=True,
-                                   color="#8bb7d7", alpha=0.6, label="Δy")
+                                   color="#4ECDC4", alpha=0.6, label="Δy")
 
             self.ax_histd.set_ylabel("p(Δ)", labelpad=5, fontsize=12)
             self.ax_histd.set_xlabel("Δ", fontsize=12)
@@ -2071,10 +2051,10 @@ class SimulationWidget(QtWidgets.QWidget):
 
             if has_dx:
                 self.ax_histd.hist(self.selected_particles_data['dx'], bins=self.bins_count, density=True,
-                                   color="#8dd38d", alpha=0.6, label="Δx")
+                                   color="#FF6B6B", alpha=0.6, label="Δx")
             if has_dy:
                 self.ax_histd.hist(self.selected_particles_data['dy'], bins=self.bins_count, density=True,
-                                   color="#8bb7d7", alpha=0.6, label="Δy")
+                                   color="#4ECDC4", alpha=0.6, label="Δy")
 
             self.ax_histd.set_ylabel("p(Δ)", labelpad=5, fontsize=12)
             self.ax_histd.set_xlabel("Δ", fontsize=12)
@@ -2331,7 +2311,6 @@ class SimulationWidget(QtWidgets.QWidget):
         # Если включен режим выбора частиц, обрабатываем выбор
         if self.particle_selection_mode and event.button == 1:
             self._select_particle(event)
-            return
 
         # Остальная логика для рисования полигонов
         v_k = self._vessel_display_to_key(str(self.vessel_box.currentText()))
@@ -2587,7 +2566,7 @@ class AuthorsWidget(QtWidgets.QWidget):
         left = QtWidgets.QVBoxLayout()
         left.addSpacing(80)
         left.setSpacing(6)  # 🔹 уменьшили расстояние между текстом и фото
-        left.setContentsMargins(3, 0, 3, 0)  # 🔹 убрали внутренние поля
+        left.setContentsMargins(2, 0, 2, 0)  # 🔹 убрали внутренние поля
 
         self.name1_label = QtWidgets.QLabel()
         self.name1_label.setStyleSheet("font-size:16pt; font-weight:600;")
@@ -2608,7 +2587,7 @@ class AuthorsWidget(QtWidgets.QWidget):
         right = QtWidgets.QVBoxLayout()
         right.addSpacing(80)
         right.setSpacing(6)  # 🔹 уменьшили расстояние между текстом и фото
-        right.setContentsMargins(3, 0, 3, 0)  # 🔹 убрали внутренние поля
+        right.setContentsMargins(2, 0, 2, 0)  # 🔹 убрали внутренние поля
 
         self.name2_label = QtWidgets.QLabel()
         self.name2_label.setStyleSheet("font-size:16pt; font-weight:600;")
