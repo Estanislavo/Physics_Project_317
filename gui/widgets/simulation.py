@@ -1,6 +1,7 @@
 from PyQt6 import QtWidgets, QtCore, QtGui
 import numpy as np
 import matplotlib.pyplot as plt
+from PyQt6.QtWidgets import QSizePolicy
 from matplotlib import patches
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 
@@ -101,6 +102,8 @@ class SimulationWidget(QtWidgets.QWidget):
 
     def _build_ui(self):
         main_l = QtWidgets.QHBoxLayout(self)
+
+        # ---------- ЛЕВАЯ ПАНЕЛЬ НАСТРОЕК ----------
         self.settings_panel = QtWidgets.QWidget()
         self.settings_panel.setMinimumWidth(300)
         self.settings_panel.setStyleSheet("background:#f0f0f2; border-right: 2px solid #ddd;")
@@ -129,7 +132,12 @@ class SimulationWidget(QtWidgets.QWidget):
             lbl = QtWidgets.QLabel()
             lbl.setObjectName(f"lbl_{key_label}")
             lbl.setStyleSheet("font-size:14.5pt; font-weight:500; color:#2c2c2c;")
-            lbl.setFixedWidth(45)
+            #lbl.setFixedWidth(45)
+            lbl.setMinimumWidth(40)
+            lbl.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Preferred,
+                QtWidgets.QSizePolicy.Policy.Fixed
+            )
             row.addWidget(lbl)
             
             slider.setStyleSheet("""
@@ -148,16 +156,22 @@ class SimulationWidget(QtWidgets.QWidget):
                     background: #2a5f96;
                 }
             """)
-            row.addWidget(slider)
+            row.addWidget(slider, stretch=1)
             
-            label_value.setFixedWidth(45)
+            label_value.setMinimumWidth(55)
             label_value.setStyleSheet("font-size:14.5pt; color:#555; text-align:center;")
+            label_value.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
             row.addWidget(label_value)
             
             if key_unit:
                 u = QtWidgets.QLabel()
                 u.setObjectName(f"unit_{key_label}")
-                u.setFixedWidth(50)
+                #u.setFixedWidth(50)
+                u.setMinimumWidth(70)
+                u.setSizePolicy(
+                    QtWidgets.QSizePolicy.Policy.Preferred,
+                    QtWidgets.QSizePolicy.Policy.Fixed
+                )
                 u.setStyleSheet("font-size:14.5pt; color:#777;")
                 row.addWidget(u)
             
@@ -180,17 +194,25 @@ class SimulationWidget(QtWidgets.QWidget):
             lbl.setObjectName(f"lbl_{key_label}")
             lbl.setStyleSheet("font-size:14.5pt; font-weight:500; color:#2c2c2c;")
             row.addWidget(lbl)
-            
+
             combobox.setStyleSheet("""
                 QComboBox, QSpinBox{
                     font-size:16pt; 
-                    width: 180px;
+                    /* min-width вместо width */
+                    min-width: 140px;
                     padding: 3px; 
                     border: 1px solid #bbb; 
                     border-radius: 3px;
                     background: white;
                 }
             """)
+
+            combobox.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed
+            )
+
+
             row.addWidget(combobox)
             sp_layout.addLayout(row)
 
@@ -404,15 +426,30 @@ class SimulationWidget(QtWidgets.QWidget):
         sp_layout.addStretch(1)
         sp_layout.addWidget(self.btn_back)
 
-        canvas_container = QtWidgets.QHBoxLayout()
-        main_l.addWidget(self.settings_panel)
-        main_l.addLayout(canvas_container, stretch=1)
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        main_l.addWidget(splitter)
 
-        anim_container = QtWidgets.QVBoxLayout()
-        canvas_container.addLayout(anim_container, stretch=2)
+        # левая часть сплиттера — панель настроек
+        splitter.addWidget(self.settings_panel)
 
-        hist_container = QtWidgets.QVBoxLayout()
-        canvas_container.addLayout(hist_container, stretch=2)
+        # центральная часть – анимация
+        anim_widget = QtWidgets.QWidget()
+        anim_container = QtWidgets.QVBoxLayout(anim_widget)
+
+        # правая часть – гистограммы
+        hist_widget = QtWidgets.QWidget()
+        hist_container = QtWidgets.QVBoxLayout(hist_widget)
+
+        splitter.addWidget(anim_widget)
+        splitter.addWidget(hist_widget)
+
+        # чтобы центр и гистограммы растягивались, а настройки оставались более-менее фикс
+        splitter.setStretchFactor(0, 0)  # settings_panel
+        splitter.setStretchFactor(1, 2)  # anim
+        splitter.setStretchFactor(2, 2)  # hist
+
+        # можно задать стартовые размеры (подбери под себя)
+        splitter.setSizes([350, 700, 500])
 
         # Верхняя панель для анимации с двумя рядами кнопок
         top_bar = QtWidgets.QVBoxLayout()
