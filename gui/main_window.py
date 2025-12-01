@@ -7,6 +7,21 @@ from gui.widgets.simulation import SimulationWidget
 from gui.widgets.authors import AuthorsWidget
 
 
+
+def resource_path(relative_path: str) -> str:
+    """
+    Путь к ресурсу и при обычном запуске, и из PyInstaller-EXE.
+    relative_path задаём ОТ КОРНЯ проекта (phys), например 'theory.pdf' или 'images/foo.png'.
+    """
+    # Запуск из собранного exe (onefile/onedir)
+    if hasattr(sys, '_MEIPASS'):
+        base_path = sys._MEIPASS
+    else:
+        # Запуск из исходников: файл лежит в phys/gui/... -> поднимаемся в phys/
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, relative_path)
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -52,7 +67,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def open_theory_pdf(self):
         """Открывает PDF-файл с теорией"""
         try:
-            pdf_path = os.path.join(os.getcwd(), "theory.pdf")
+            # theory.pdf лежит в КОРНЕ phys
+            pdf_path = resource_path("theory.pdf")
+
             if os.path.exists(pdf_path):
                 if sys.platform == "win32":
                     os.startfile(pdf_path)
@@ -61,15 +78,20 @@ class MainWindow(QtWidgets.QMainWindow):
                 else:  # linux
                     os.system(f'xdg-open "{pdf_path}"')
             else:
-                # Если файл не найден, показываем сообщение
                 msg = QtWidgets.QMessageBox(self)
                 msg.setIcon(QtWidgets.QMessageBox.Icon.Warning)
                 msg.setWindowTitle("Файл не найден")
-                msg.setText("Файл theory.pdf не найден в папке с программой.")
+                msg.setText(
+                    "Файл theory.pdf не найден.\n"
+                    f"Искали по пути:\n{pdf_path}"
+                )
                 msg.exec()
         except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось открыть файл теории: {str(e)}")
-
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Ошибка",
+                f"Не удалось открыть файл теории: {str(e)}"
+            )
     def set_language(self, lang: Lang):
         self.lang = lang
         self.apply_language()

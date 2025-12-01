@@ -7,6 +7,20 @@ import matplotlib
 
 from gui.main_window import MainWindow
 
+#pyinstaller --noconfirm --onefile --windowed main.py
+
+'''
+pyinstaller --noconfirm --onefile --windowed ^
+  --add-data "config;config" ^
+  --add-data "gui;gui" ^
+  --add-data "images;images" ^
+  --add-data "physics;physics" ^
+  --add-data "utils;utils" ^
+  --add-data "theory.pdf;." ^
+  main.py
+'''
+
+
 def main():
     app = QtWidgets.QApplication(sys.argv)
 
