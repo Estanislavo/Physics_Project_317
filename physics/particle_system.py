@@ -15,10 +15,10 @@ from utils.numba_functions import (
 @dataclass
 class System:
     vessel: Vessel
-    N: int = 10
-    radius: float = 3.0
-    visual_radius: float = 3.0
-    temp: float = 5
+    N: int = config.constants.DEFAULT_N
+    radius: float = config.constants.DEFAULT_RADIUS
+    visual_radius: float = config.constants.DEFAULT_RADIUS
+    temp: float = config.constants.DEFAULT_TEMP
     dt: float = config.constants.DEFAULT_DT
     params: PotentialParams = field(default_factory=PotentialParams)
     mass: float = config.constants.DEFAULT_MASS
@@ -95,6 +95,52 @@ class System:
             self._fill_remaining_particles(rng, placed, len(placed))
         else:
             self.pos = np.array(placed)
+
+    def _polygon_area(self, poly):
+        x = poly[:, 0]
+        y = poly[:, 1]
+        return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
+
+    def _place_forced(self, i, rng):
+        """Place particle i when normal placement fails - used as fallback."""
+        xmin, ymin, xmax, ymax = self.vessel.bounds(margin=self.radius)
+        for _ in range(100):
+            if self.vessel.kind in ("rect", "Прямоугольник"):
+                p = np.array([rng.uniform(xmin, xmax), rng.uniform(ymin, ymax)])
+            elif self.vessel.kind in ("circle", "Круг"):
+                cx, cy, R = self.vessel.circle
+                ang = rng.uniform(0, 2 * np.pi)
+                rad = math.sqrt(rng.uniform(0, (R - self.radius) ** 2))
+                p = np.array([cx, cy]) + rad * np.array([math.cos(ang), math.sin(ang)])
+            else:
+                p = np.array([rng.uniform(xmin, xmax), rng.uniform(ymin, ymax)])
+            if self.vessel.contains(p):
+                self.pos[i] = p
+                return
+        # Last resort: place at center
+        if self.vessel.kind in ("circle", "Круг"):
+            cx, cy, R = self.vessel.circle
+            self.pos[i] = np.array([cx, cy])
+        else:
+            cx = (xmin + xmax) / 2
+            cy = (ymin + ymax) / 2
+            self.pos[i] = np.array([cx, cy])
+
+    def _fill_remaining_particles(self, rng, placed, start_idx):
+        """Fill remaining particles when grid placement doesn't have enough."""
+        xmin, ymin, xmax, ymax = self.vessel.bounds(margin=self.radius)
+        for i in range(start_idx, self.N):
+            for _ in range(1000):
+                # Random point in bounding box
+                p = np.array([rng.uniform(xmin, xmax), rng.uniform(ymin, ymax)])
+                if self.vessel.contains(p):
+                    if np.all(np.linalg.norm(np.array(placed) - p, axis=1) >= 2 * self.radius):
+                        placed.append(p)
+                        break
+            else:
+                # Fallback: place anyway
+                placed.append(np.array([rng.uniform(xmin, xmax), rng.uniform(ymin, ymax)]))
+        self.pos = np.array(placed[:self.N])
 
     def compute_forces(self):
         if self.pos is None:

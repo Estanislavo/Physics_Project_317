@@ -55,7 +55,7 @@ class AuthorsWidget(QtWidgets.QWidget):
         self.name1_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         left.addWidget(self.name1_label)
 
-        pix = self._load_sticker("author1.png") or self._load_sticker("author1.jpg")
+        pix = self._load_sticker("author1.jpg") or self._load_sticker("author1.png")
         if pix:
             lbl = QtWidgets.QLabel()
             lbl.setPixmap(pix)
@@ -76,7 +76,7 @@ class AuthorsWidget(QtWidgets.QWidget):
         self.name2_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         right.addWidget(self.name2_label)
 
-        pix2 = self._load_sticker("author2.png") or self._load_sticker("author2.jpg")
+        pix2 = self._load_sticker("author2.jpg") or self._load_sticker("author2.png")
         if pix2:
             lbl2 = QtWidgets.QLabel()
             lbl2.setPixmap(pix2)

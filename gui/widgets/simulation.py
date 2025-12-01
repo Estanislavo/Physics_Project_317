@@ -102,7 +102,7 @@ class SimulationWidget(QtWidgets.QWidget):
     def _build_ui(self):
         main_l = QtWidgets.QHBoxLayout(self)
         self.settings_panel = QtWidgets.QWidget()
-        self.settings_panel.setFixedWidth(300)
+        self.settings_panel.setMinimumWidth(300)
         self.settings_panel.setStyleSheet("background:#f0f0f2; border-right: 2px solid #ddd;")
         sp_layout = QtWidgets.QVBoxLayout(self.settings_panel)
         sp_layout.setContentsMargins(8, 8, 8, 8)
@@ -119,7 +119,7 @@ class SimulationWidget(QtWidgets.QWidget):
                 h = QtWidgets.QLabel()
                 h.setObjectName(f"help_{key_label}")
                 h.setWordWrap(True)
-                h.setStyleSheet("color:#666; font-size:16pt; margin-top:4px; padding:0px;")
+                h.setStyleSheet("color:#666; font-size:14.5pt; margin-top:4px; padding:0px;")
                 sp_layout.addWidget(h)
             
             row = QtWidgets.QHBoxLayout()
@@ -128,7 +128,7 @@ class SimulationWidget(QtWidgets.QWidget):
             
             lbl = QtWidgets.QLabel()
             lbl.setObjectName(f"lbl_{key_label}")
-            lbl.setStyleSheet("font-size:16pt; font-weight:500; color:#2c2c2c;")
+            lbl.setStyleSheet("font-size:14.5pt; font-weight:500; color:#2c2c2c;")
             lbl.setFixedWidth(45)
             row.addWidget(lbl)
             
@@ -151,14 +151,14 @@ class SimulationWidget(QtWidgets.QWidget):
             row.addWidget(slider)
             
             label_value.setFixedWidth(45)
-            label_value.setStyleSheet("font-size:16pt; color:#555; text-align:center;")
+            label_value.setStyleSheet("font-size:14.5pt; color:#555; text-align:center;")
             row.addWidget(label_value)
             
             if key_unit:
                 u = QtWidgets.QLabel()
                 u.setObjectName(f"unit_{key_label}")
                 u.setFixedWidth(50)
-                u.setStyleSheet("font-size:16pt; color:#777;")
+                u.setStyleSheet("font-size:14.5pt; color:#777;")
                 row.addWidget(u)
             
             sp_layout.addLayout(row)
@@ -169,7 +169,7 @@ class SimulationWidget(QtWidgets.QWidget):
                 h = QtWidgets.QLabel()
                 h.setObjectName(f"help_{key_label}")
                 h.setWordWrap(True)
-                h.setStyleSheet("color:#666; font-size:16pt; margin:0px; padding:0px;")
+                h.setStyleSheet("color:#666; font-size:14.5pt; margin:0px; padding:0px;")
                 sp_layout.addWidget(h)
             
             row = QtWidgets.QHBoxLayout()
@@ -178,7 +178,7 @@ class SimulationWidget(QtWidgets.QWidget):
             
             lbl = QtWidgets.QLabel()
             lbl.setObjectName(f"lbl_{key_label}")
-            lbl.setStyleSheet("font-size:16pt; font-weight:500; color:#2c2c2c;")
+            lbl.setStyleSheet("font-size:14.5pt; font-weight:500; color:#2c2c2c;")
             row.addWidget(lbl)
             
             combobox.setStyleSheet("""
@@ -819,7 +819,7 @@ class SimulationWidget(QtWidgets.QWidget):
     def _reinitialize_system(self, reset_hist: bool = False):
         """Полная переинициализация системы с текущими настройками."""
         N = int(self.spin_N.value())
-        radius = 3
+        radius = config.constants.DEFAULT_RADIUS
         temp = float(self.edit_T.value()) / 10.0
         dt = config.constants.DEFAULT_DT
         mass = float(self.edit_m.value()) / 1000.0
@@ -1028,21 +1028,21 @@ class SimulationWidget(QtWidgets.QWidget):
 
         self.canvas_anim.draw_idle()
 
-    def _init_simulation(self, N=10, radius=3, temp=5, dt=config.constants.DEFAULT_DT,
+    def _init_simulation(self, N=config.constants.DEFAULT_N, radius=config.constants.DEFAULT_RADIUS, temp=config.constants.DEFAULT_TEMP, dt=config.constants.DEFAULT_DT,
                          vessel_kind="Прямоугольник", poly=None,
                          potential_params=None, mass=config.constants.DEFAULT_MASS, enable_collisions=True, interaction_step=1):
         if potential_params is None:
             potential_params = PotentialParams()
         if vessel_kind in ("rect", "Прямоугольник"):
-            vessel = Vessel(kind="Прямоугольник", rect=(-100, -100, 100, 100))
+            vessel = Vessel(kind="Прямоугольник", rect=config.constants.VESSEL_RECT_BOUNDS)
         elif vessel_kind in ("circle", "Круг"):
-            vessel = Vessel(kind="Круг", circle=(0, 0, 100))
+            vessel = Vessel(kind="Круг", circle=config.constants.VESSEL_CIRCLE_CENTER_AND_RADIUS)
         elif vessel_kind in ("poly", "Многоугольник"):
             if poly is None:
-                poly = np.array([[-80, -80], [80, -80], [0.0, 80]])
+                poly = np.array(config.constants.VESSEL_POLYGON_DEFAULT)
             vessel = Vessel(kind="Многоугольник", poly=poly)
         else:
-            vessel = Vessel(kind="Прямоугольник", rect=(-100, -100, 100, 100))
+            vessel = Vessel(kind="Прямоугольник", rect=config.constants.VESSEL_RECT_BOUNDS)
         self.system = System(vessel=vessel, N=N, radius=radius, visual_radius=radius, temp=temp, dt=dt,
                              params=potential_params, mass=mass, enable_collisions=enable_collisions,
                              interaction_step=interaction_step)
@@ -1311,85 +1311,17 @@ class SimulationWidget(QtWidgets.QWidget):
         self.ax_histx.set_title(s["sim.hist.x"], fontsize=14, fontweight='bold')
         self.ax_histx.tick_params(labelsize=11)
 
-        # --- THEORETICAL p(x) ---
-        # v = self.system.vessel
-        # vk = self._vessel_kind_to_key(v.kind)
-
-        # xs = np.linspace(self.ax_histx.get_xlim()[0], self.ax_histx.get_xlim()[1], 400)
-
-        # if vk == "circle":
-        #     cx, cy, R = v.circle
-        #     mask = np.abs(xs - cx) <= R
-        #     px = np.zeros_like(xs)
-        #     px[mask] = (2 / (np.pi * R * R)) * np.sqrt(R * R - (xs[mask] - cx)**2)
-        #     self.ax_histx.plot(xs, px, linewidth=2, alpha=0.9)
-        # elif vk == "rect":
-        #     xmin, ymin, xmax, ymax = v.rect
-        #     L = xmax - xmin
-        #     px = np.ones_like(xs) * (1 / L)
-        #     self.ax_histx.plot(xs, px, linewidth=2, alpha=0.9)
-
-
         if len(self.accumulated_y) > 0:
             self.ax_histy.hist(self.accumulated_y, bins=self.bins_count, density=True, color="#f9ad6c", alpha=0.8)
         self.ax_histy.set_ylabel("p(y)", labelpad=5, fontsize=13)
         self.ax_histy.set_title(s["sim.hist.y"], fontsize=14, fontweight='bold')
         self.ax_histy.tick_params(labelsize=11)
 
-        # --- THEORETICAL p(y) ---
-        # ys = np.linspace(self.ax_histy.get_xlim()[0], self.ax_histy.get_xlim()[1], 400)
-
-        # if vk == "circle":
-        #     cx, cy, R = v.circle
-        #     mask = np.abs(ys - cy) <= R
-        #     py = np.zeros_like(ys)
-        #     py[mask] = (2 / (np.pi * R * R)) * np.sqrt(R * R - (ys[mask] - cy)**2)
-        #     self.ax_histy.plot(ys, py, linewidth=2, alpha=0.9)
-        # elif vk == "rect":
-        #     ymin, ymax = v.rect[1], v.rect[3]
-        #     H = ymax - ymin
-        #     py = np.ones_like(ys) * (1 / H)
-        #     self.ax_histy.plot(ys, py, linewidth=2, alpha=0.9)
-
-
         # Разные режимы отображения для третьего графика
         if self.distance_display_mode == 0:  # Обычное расстояние
             if len(self.accumulated_distances) > 0:
                 self.ax_histd.hist(self.accumulated_distances, bins=self.bins_count, density=True, color=config.constants.HISTOGRAM_COLORS['distance'],
                                    alpha=0.85)
-            
-            # --- THEORETICAL p(r) for uniform distribution in a vessel ---
-            # v = self.system.vessel
-            # vk = self._vessel_kind_to_key(v.kind)
-            
-            # rs = np.linspace(self.ax_histd.get_xlim()[0], self.ax_histd.get_xlim()[1], 400)
-            
-            # if vk == "circle":
-            #     # For a circle of radius R, p(r) = 2*r/R^2 for 0 <= r <= 2*R
-            #     cx, cy, R = v.circle
-            #     pr = np.zeros_like(rs)
-            #     mask = (rs >= 0) & (rs <= 2*R)
-            #     pr[mask] = (2 * rs[mask]) / (R * R)
-            #     self.ax_histd.plot(rs, pr, linewidth=2, alpha=0.9, color='red', label='Теория')
-            # elif vk == "rect":
-            #     # For a rectangle, triangular distribution
-            #     xmin, ymin, xmax, ymax = v.rect
-            #     L = xmax - xmin
-            #     H = ymax - ymin
-            #     # Maximum possible distance is sqrt(L^2 + H^2)
-            #     max_dist = np.sqrt(L*L + H*H)
-            #     pr = np.zeros_like(rs)
-            #     mask = (rs >= 0) & (rs <= max_dist)
-            #     # Triangular distribution: p(r) = 4*r/max_dist^2 for r <= max_dist/2, 
-            #     # and p(r) = 4*(max_dist-r)/max_dist^2 for r > max_dist/2
-            #     mid = max_dist / 2.0
-            #     for i in np.where(mask)[0]:
-            #         r = rs[i]
-            #         if r <= mid:
-            #             pr[i] = (4.0 * r) / (max_dist * max_dist)
-            #         else:
-            #             pr[i] = (4.0 * (max_dist - r)) / (max_dist * max_dist)
-            #     self.ax_histd.plot(rs, pr, linewidth=2, alpha=0.9, color='red', label='Теория')
             
             self.ax_histd.set_ylabel("p(r)", labelpad=5, fontsize=13)
             self.ax_histd.set_xlabel("r", fontsize=13)

@@ -1,13 +1,21 @@
 import numpy as np
 from dataclasses import dataclass
 from matplotlib.path import Path
+import config.constants
 
 @dataclass
 class Vessel:
     kind: str = "Прямоугольник"
-    rect: tuple = (-100.0, -100.0, 100.0, 100.0)
-    circle: tuple = (0.0, 0.0, 100.0)
+    rect: tuple = None
+    circle: tuple = None
     poly: np.ndarray | None = None
+
+    def __post_init__(self):
+        """Set defaults from constants if not provided."""
+        if self.rect is None:
+            self.rect = config.constants.VESSEL_RECT_BOUNDS
+        if self.circle is None:
+            self.circle = config.constants.VESSEL_CIRCLE_CENTER_AND_RADIUS
 
     def contains(self, p: np.ndarray) -> bool:
         if self.kind in ("rect", "Прямоугольник"):
@@ -32,7 +40,10 @@ class Vessel:
             xmax, ymax = self.poly.max(axis=0)
             return (xmin + margin, ymin + margin, xmax - margin, ymax - margin)
         else:
-            return (-100 + margin, -100 + margin, 100 - margin, 100 - margin)
+            return (config.constants.VESSEL_RECT_BOUNDS[0] + margin, 
+                    config.constants.VESSEL_RECT_BOUNDS[1] + margin, 
+                    config.constants.VESSEL_RECT_BOUNDS[2] - margin, 
+                    config.constants.VESSEL_RECT_BOUNDS[3] - margin)
 
     @staticmethod
     def polygon_area(poly):
