@@ -423,14 +423,22 @@ class SimulationWidget(QtWidgets.QWidget):
             QPushButton:hover { background: #413132; }
             QPushButton:pressed { background: #211112; }
         """)
-        sp_layout.addStretch(1)
+        sp_layout.addSpacing(6)
         sp_layout.addWidget(self.btn_back)
+
+        # Обернуть settings_panel в QScrollArea для правильной работы при сворачивании
+        self.scroll_settings = QtWidgets.QScrollArea()
+        self.scroll_settings.setWidget(self.settings_panel)
+        self.scroll_settings.setWidgetResizable(True)
+        self.scroll_settings.setStyleSheet("QScrollArea { border: none; background: #f0f0f2; }")
+        self.scroll_settings.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_settings.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         main_l.addWidget(splitter)
 
         # левая часть сплиттера — панель настроек
-        splitter.addWidget(self.settings_panel)
+        splitter.addWidget(self.scroll_settings)
 
         # центральная часть – анимация
         anim_widget = QtWidgets.QWidget()
@@ -1510,10 +1518,10 @@ class SimulationWidget(QtWidgets.QWidget):
     def _toggle_settings(self):
         lang = self.get_lang_cb()
         s = STRINGS[lang.value]
-        if self.settings_panel.isVisible():
-            self.settings_panel.hide()
+        if self.scroll_settings.isVisible():
+            self.scroll_settings.hide()
         else:
-            self.settings_panel.show()
+            self.scroll_settings.show()
 
     def _enter_draw_mode(self):
         # проверяем по каноническому ключу текущий выбранный сосуд
@@ -1595,7 +1603,7 @@ class SimulationWidget(QtWidgets.QWidget):
             # Создаем линию между частицами
             self.distance_line = patches.ConnectionPatch(
                 pos1, pos2, 'data', 'data',
-                arrowstyle='-', color='red', linewidth=2, alpha=0.7
+                linestyle='--', color='red', linewidth=2, alpha=0.5
             )
             self.ax_anim.add_patch(self.distance_line)
 
